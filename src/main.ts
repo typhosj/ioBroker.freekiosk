@@ -4,6 +4,7 @@ import { buildCommand, type ImageKind } from './lib/commands';
 import { validateConfig, type DeviceConfig, type InstanceConfig } from './lib/config';
 import { CHANNELS, mqttOnlyIds, statesFor, type StateDef } from './lib/objects';
 import { fetchImage, fetchStatus, HttpError, Poller, sendRest, type RestTarget } from './lib/rest';
+import { latestOnly } from './lib/latest';
 import { mapStatus } from './lib/status';
 
 interface Tablet {
@@ -11,10 +12,16 @@ interface Tablet {
     online: boolean;
     failLogged: boolean;
     poller?: Poller;
+    submitStatus: (raw: unknown) => void;
 }
 
 function errorText(err: unknown): string {
-    return err instanceof Error ? err.message : String(err);
+    if (!(err instanceof Error)) {
+        return String(err);
+    }
+    const cause: unknown = err.cause;
+    const code = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+    return typeof code === 'string' ? `${err.message} (${code})` : err.message;
 }
 
 function commonOf(def: StateDef): ioBroker.StateCommon {
@@ -48,7 +55,12 @@ class Freekiosk extends utils.Adapter {
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'freekiosk' });
         this.on('ready', () => {
-            this.onReady().catch(err => this.log.error(`Start failed: ${errorText(err)}`));
+            this.onReady().catch(async err => {
+                this.log.error(
+                    `Start failed: ${errorText(err)}; the adapter stays idle until the instance is restarted`,
+                );
+                await this.stopAll();
+            });
         });
         this.on('unload', callback => {
             void this.onUnload(callback);
@@ -67,20 +79,37 @@ class Freekiosk extends utils.Adapter {
             return;
         }
         for (const device of config.devices) {
-            const tablet: Tablet = { config: device, online: false, failLogged: false };
+            const tablet: Tablet = {
+                config: device,
+                online: false,
+                failLogged: false,
+                submitStatus: latestOnly(
+                    raw => this.applyStatus(tablet, raw),
+                    err => this.log.warn(`${device.name}: status not stored: ${errorText(err)}`),
+                ),
+            };
             this.tablets.set(device.id, tablet);
             if (device.transport === 'mqtt') {
                 this.byTopic.set(device.topicId, tablet);
             }
             await this.createObjects(device);
+            if (this.stopping) {
+                return;
+            }
         }
         if (this.byTopic.size) {
             await this.startBroker(config);
+            if (this.stopping) {
+                return;
+            }
         }
         for (const tablet of this.tablets.values()) {
             if (tablet.config.transport === 'rest') {
                 this.startPolling(tablet, config.restInterval);
             }
+        }
+        if (this.stopping) {
+            return;
         }
         this.on('stateChange', (id, state) => {
             this.onStateChange(id, state).catch(err => this.log.error(`Command ${id} failed: ${errorText(err)}`));
@@ -88,6 +117,9 @@ class Freekiosk extends utils.Adapter {
         for (const tablet of this.tablets.values()) {
             for (const def of statesFor(tablet.config.transport).filter(s => s.write)) {
                 await this.subscribeStatesAsync(`${tablet.config.id}.${def.id}`);
+                if (this.stopping) {
+                    return;
+                }
             }
         }
     }
@@ -166,7 +198,7 @@ class Freekiosk extends utils.Adapter {
     private async startBroker(config: InstanceConfig): Promise<void> {
         const tabletOf = (topicId: string): Tablet | undefined => this.byTopic.get(topicId);
         try {
-            this.broker = await Broker.start(
+            const broker = await Broker.start(
                 {
                     port: config.mqttPort,
                     baseTopic: config.mqttBaseTopic,
@@ -177,15 +209,13 @@ class Freekiosk extends utils.Adapter {
                 {
                     status: (topicId, raw) => {
                         const tablet = tabletOf(topicId);
-                        if (tablet) {
-                            this.applyStatus(tablet, raw).catch(err =>
-                                this.log.warn(`${tablet.config.name}: status not stored: ${errorText(err)}`),
-                            );
+                        if (tablet && !this.stopping) {
+                            tablet.submitStatus(raw);
                         }
                     },
                     online: (topicId, online) => {
                         const tablet = tabletOf(topicId);
-                        if (tablet) {
+                        if (tablet && !this.stopping) {
                             this.log.info(`${tablet.config.name} ${online ? 'connected' : 'disconnected'} (MQTT)`);
                             this.setOnline(tablet, online).catch(err =>
                                 this.log.warn(`${tablet.config.name}: ${errorText(err)}`),
@@ -194,7 +224,7 @@ class Freekiosk extends utils.Adapter {
                     },
                     image: (topicId, kind, data) => {
                         const tablet = tabletOf(topicId);
-                        if (tablet) {
+                        if (tablet && !this.stopping) {
                             this.storeImage(tablet, kind, data, 'jpg').catch(err =>
                                 this.log.warn(`${tablet.config.name}: image not stored: ${errorText(err)}`),
                             );
@@ -206,6 +236,11 @@ class Freekiosk extends utils.Adapter {
                     error: err => this.log.error(`MQTT broker: ${errorText(err)}`),
                 },
             );
+            if (this.stopping) {
+                await broker.close();
+                return;
+            }
+            this.broker = broker;
             this.log.info(`MQTT broker listening on port ${config.mqttPort}`);
         } catch (err) {
             this.log.error(
@@ -215,24 +250,30 @@ class Freekiosk extends utils.Adapter {
     }
 
     private async applyStatus(tablet: Tablet, raw: unknown): Promise<void> {
+        if (this.stopping) {
+            return;
+        }
         const { values, skipped } = mapStatus(raw, tablet.config.transport);
         if (skipped.length) {
             this.log.debug(`${tablet.config.name}: skipped status fields ${skipped.join(', ')}`);
         }
         for (const [id, value] of values) {
+            if (this.stopping) {
+                return;
+            }
             await this.setStateChangedAsync(`${tablet.config.id}.${id}`, value, true);
         }
         await this.setStateAsync(`${tablet.config.id}.info.lastUpdate`, Date.now(), true);
     }
 
     private async setOnline(tablet: Tablet, online: boolean): Promise<void> {
-        if (tablet.online === online) {
+        if (this.stopping || tablet.online === online) {
             return;
         }
         tablet.online = online;
         await this.setStateAsync(`${tablet.config.id}.info.online`, online, true);
         const all = [...this.tablets.values()].every(t => t.online);
-        await this.setStateChangedAsync('info.connection', all, true);
+        await this.setStateAsync('info.connection', all, true);
     }
 
     private async storeImage(tablet: Tablet, kind: ImageKind, data: Buffer, ext: 'png' | 'jpg'): Promise<void> {
@@ -297,14 +338,21 @@ class Freekiosk extends utils.Adapter {
         }
     }
 
-    private async onUnload(callback: () => void): Promise<void> {
+    /** Stops all work and closes the broker; safe to call twice. */
+    private async stopAll(): Promise<void> {
         this.stopping = true;
+        this.abort.abort();
+        for (const tablet of this.tablets.values()) {
+            tablet.poller?.stop();
+        }
+        const broker = this.broker;
+        this.broker = undefined;
+        await broker?.close();
+    }
+
+    private async onUnload(callback: () => void): Promise<void> {
         try {
-            this.abort.abort();
-            for (const tablet of this.tablets.values()) {
-                tablet.poller?.stop();
-            }
-            await this.broker?.close();
+            await this.stopAll();
             for (const tablet of this.tablets.values()) {
                 await this.setStateAsync(`${tablet.config.id}.info.online`, false, true);
             }
