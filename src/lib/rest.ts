@@ -59,10 +59,14 @@ async function request(
         method: req.method,
         headers,
         body: req.body ? JSON.stringify(req.body) : undefined,
+        redirect: 'error', // the API key must never follow a redirect to another origin
         signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
     });
-    const limit = response.ok ? maxBytes : ERROR_MAX_BYTES;
-    const body = await readLimited(response, limit);
+    if (response.ok && maxBytes === 0) {
+        await response.body?.cancel(); // a command answer is not needed, only its status
+        return { type: '', body: Buffer.alloc(0) };
+    }
+    const body = await readLimited(response, response.ok ? maxBytes : ERROR_MAX_BYTES);
     if (!response.ok) {
         throw new HttpError(response.status, `HTTP ${response.status}: ${errorText(body)}`);
     }
@@ -115,7 +119,12 @@ export async function fetchStatus(
     timeoutMs = STATUS_TIMEOUT_MS,
 ): Promise<Record<string, unknown>> {
     const { body } = await request(target, { method: 'GET', path: '/api/status' }, signal, timeoutMs, STATUS_MAX_BYTES);
-    const parsed: unknown = JSON.parse(body.toString());
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(body.toString());
+    } catch {
+        throw new Error('status answer is not valid JSON'); // the parser message quotes the body
+    }
     if (!isObject(parsed) || parsed.success !== true || !isObject(parsed.data)) {
         throw new Error('status answer has no success flag or no data object');
     }
@@ -136,7 +145,7 @@ export async function sendRest(
     signal: AbortSignal,
     timeoutMs = COMMAND_TIMEOUT_MS,
 ): Promise<void> {
-    await request(target, req, signal, timeoutMs, ERROR_MAX_BYTES);
+    await request(target, req, signal, timeoutMs, 0);
 }
 
 /**

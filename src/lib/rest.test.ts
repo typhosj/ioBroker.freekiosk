@@ -88,6 +88,32 @@ describe('rest client', () => {
         }
     });
 
+    it('keeps the response body out of the JSON error', async () => {
+        handler = (_req, _body, res) => res.writeHead(200).end('secret-token {broken');
+        expect(String(await rejection(fetchStatus(target, never)))).not.to.contain('secret-token');
+    });
+
+    it('refuses redirects so the API key stays on the tablet', async () => {
+        handler = (_req, _body, res) => res.writeHead(302, { Location: 'http://127.0.0.1:1/' }).end();
+        expect(await rejection(fetchStatus(target, never))).to.be.instanceOf(Error);
+    });
+
+    it('rejects a streamed body over the limit without Content-Length', async () => {
+        handler = (_req, _body, res) => {
+            res.writeHead(200);
+            for (let i = 0; i < 5; i++) {
+                res.write('x'.repeat(STATUS_MAX_BYTES / 4));
+            }
+            res.end();
+        };
+        expect(String(await rejection(fetchStatus(target, never)))).to.contain('larger than');
+    });
+
+    it('accepts a command answer larger than the error limit', async () => {
+        handler = (_req, _body, res) => res.writeHead(200).end('x'.repeat(10_000));
+        await sendRest(target, { method: 'POST', path: '/api/reload' }, never);
+    });
+
     it('rejects a status body over the size limit', async () => {
         handler = (_req, _body, res) => res.writeHead(200).end('x'.repeat(STATUS_MAX_BYTES + 1));
         expect(String(await rejection(fetchStatus(target, never)))).to.contain('larger than');
