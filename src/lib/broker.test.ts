@@ -177,8 +177,40 @@ describe('Broker', () => {
         const received = new Promise<[string, string]>(resolve =>
             client.once('message', (topic, payload) => resolve([topic, payload.toString()])),
         );
+        await until(() => broker.isOnline('kitchen'));
         await broker.publish('kitchen', 'screen', 'OFF');
         expect(await received).to.deep.equal(['freekiosk/kitchen/set/screen', 'OFF']);
+    });
+
+    it('ignores oversize payloads on unknown suffixes', async () => {
+        const client = await tablet();
+        await client.publishAsync('freekiosk/kitchen/whatever', 'x'.repeat(70 * 1024));
+        await client.publishAsync('freekiosk/kitchen/availability', 'online');
+        await until(() => broker.isOnline('kitchen'));
+        expect(rec.calls.filter(c => c[0] === 'dropped')).to.have.length(0);
+    });
+
+    it('reports at most 100 distinct unknown tablets', async () => {
+        const client = await tablet();
+        for (let i = 0; i < 105; i++) {
+            await client.publishAsync(`freekiosk/ghost${i}/state`, '{}');
+        }
+        await client.publishAsync('freekiosk/kitchen/availability', 'online');
+        await until(() => broker.isOnline('kitchen'));
+        expect(rec.calls.filter(c => c[0] === 'unknownTablet')).to.have.length(100);
+    });
+
+    it('is not online after a reconnect until it announces itself again', async () => {
+        const first = await tablet({ clientId: 'freekiosk_a' });
+        await first.publishAsync('freekiosk/kitchen/availability', 'online');
+        await until(() => broker.isOnline('kitchen'));
+        first.end(true);
+        await until(() => !broker.isOnline('kitchen'));
+        const again = await tablet({ clientId: 'freekiosk_a' });
+        await again.subscribeAsync('freekiosk/kitchen/set/#');
+        expect(broker.isOnline('kitchen')).to.equal(false);
+        await again.publishAsync('freekiosk/kitchen/availability', 'online');
+        await until(() => broker.isOnline('kitchen'));
     });
 
     it('refuses to publish to an offline tablet', async () => {

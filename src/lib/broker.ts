@@ -6,6 +6,9 @@ import type { ImageKind } from './commands';
 export const STATE_MAX_BYTES = 64 * 1024;
 export const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 
+/** Distinct unknown topic ids reported before further ones are ignored silently. */
+const UNKNOWN_MAX = 100;
+
 const IMAGE_SUFFIXES = new Map<string, ImageKind>([
     ['image/screenshot', 'screenshot'],
     ['image/camera_front', 'cameraFront'],
@@ -89,6 +92,7 @@ export class Broker {
     private readonly availability = new Map<string, string>();
     private readonly lastOnline = new Map<string, boolean>();
     private readonly reported = new Set<string>();
+    private readonly unknownSeen = new Set<string>();
     private readonly known: Set<string>;
     private readonly userHash: Buffer;
     private readonly passwordHash: Buffer;
@@ -122,7 +126,11 @@ export class Broker {
             }
             if (!this.known.has(parsed.topicId)) {
                 const name = printable(parsed.topicId);
-                this.once(`unknown:${name}`, () => this.events.unknownTablet(name));
+                // Bounded: a client may invent any number of topic ids.
+                if (!this.unknownSeen.has(name) && this.unknownSeen.size < UNKNOWN_MAX) {
+                    this.unknownSeen.add(name);
+                    this.events.unknownTablet(name);
+                }
                 done(null);
                 return;
             }
@@ -146,6 +154,7 @@ export class Broker {
             const topicId = this.boundTo.get(client);
             if (topicId !== undefined && this.owner.get(topicId) === client) {
                 this.owner.delete(topicId);
+                this.availability.delete(topicId);
                 this.emitOnline(topicId);
             }
         });
@@ -249,10 +258,14 @@ export class Broker {
         const { topicId, suffix } = parsed;
         const payload = Buffer.isBuffer(packet.payload) ? packet.payload : Buffer.from(packet.payload);
         const kind = IMAGE_SUFFIXES.get(suffix);
+        if (!kind && suffix !== 'availability' && suffix !== 'state') {
+            return; // unknown suffix: nothing to size-check or report
+        }
         const limit = kind ? IMAGE_MAX_BYTES : STATE_MAX_BYTES;
         if (payload.length > limit) {
-            this.once(`size:${topicId}:${suffix}`, () =>
-                this.events.dropped(topicId, `${suffix} of ${payload.length} bytes is over the limit of ${limit}`),
+            const what = kind ? 'image' : 'state';
+            this.once(`size-${what}:${topicId}`, () =>
+                this.events.dropped(topicId, `${what} of ${payload.length} bytes is over the limit of ${limit}`),
             );
             return;
         }
