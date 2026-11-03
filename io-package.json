@@ -20,40 +20,31 @@
         "titleLang": {
             "en": "FreeKiosk – Android kiosk tablets",
             "de": "FreeKiosk – Android-Kiosk-Tablets",
-            "ru": "FreeKiosk",
-            "pt": "Quiosque Grátis",
-            "nl": "Gratis Kiosk",
-            "fr": "Kiosque gratuit",
-            "it": "FreeKiosk",
-            "es": "Quiosco gratuito",
-            "pl": "Bezpłatny Kiosk",
-            "uk": "FreeKiosk",
-            "zh-cn": "免费信息亭"
+            "ru": "FreeKiosk – планшеты Android в режиме киоска",
+            "pt": "FreeKiosk – tablets Android em modo quiosque",
+            "nl": "FreeKiosk – Android-kiosktablets",
+            "fr": "FreeKiosk – tablettes Android en mode kiosque",
+            "it": "FreeKiosk – tablet Android in modalità chiosco",
+            "es": "FreeKiosk – tabletas Android en modo quiosco",
+            "pl": "FreeKiosk – tablety z Androidem w trybie kiosku",
+            "uk": "FreeKiosk – планшети Android у режимі кіоска",
+            "zh-cn": "FreeKiosk – Android 信息亭平板电脑"
         },
         "desc": {
             "en": "Monitor and control Android tablets running FreeKiosk over REST or MQTT",
             "de": "Android-Tablets mit FreeKiosk über REST oder MQTT überwachen und steuern",
-            "ru": "Мониторинг и управление планшетами Android с FreeKiosk через REST или MQTT.",
-            "pt": "Monitore e controle tablets Android executando FreeKiosk via REST ou MQTT",
-            "nl": "Bewaak en beheer Android-tablets met FreeKiosk via REST of MQTT",
-            "fr": "Surveillez et contrôlez les tablettes Android exécutant FreeKiosk via REST ou MQTT",
-            "it": "Monitora e controlla i tablet Android che eseguono FreeKiosk su REST o MQTT",
-            "es": "Supervise y controle tabletas Android que ejecutan FreeKiosk a través de REST o MQTT",
-            "pl": "Monitoruj i kontroluj tablety z Androidem, na których działa FreeKiosk poprzez REST lub MQTT",
-            "uk": "Контролюйте та керуйте планшетами Android, які працюють під керуванням FreeKiosk через REST або MQTT",
-            "zh-cn": "通过 REST 或 MQTT 监视和控制运行 FreeKiosk 的 Android 平板电脑"
+            "ru": "Мониторинг и управление планшетами Android с FreeKiosk через REST или MQTT",
+            "pt": "Monitorize e controle tablets Android com FreeKiosk através de REST ou MQTT",
+            "nl": "Bewaak en bestuur Android-tablets met FreeKiosk via REST of MQTT",
+            "fr": "Surveiller et contrôler des tablettes Android exécutant FreeKiosk via REST ou MQTT",
+            "it": "Monitora e controlla i tablet Android con FreeKiosk tramite REST o MQTT",
+            "es": "Supervise y controle tabletas Android con FreeKiosk mediante REST o MQTT",
+            "pl": "Monitoruj i steruj tabletami z Androidem z FreeKiosk przez REST lub MQTT",
+            "uk": "Моніторинг і керування планшетами Android з FreeKiosk через REST або MQTT",
+            "zh-cn": "通过 REST 或 MQTT 监控和控制运行 FreeKiosk 的 Android 平板电脑"
         },
-        "authors": [
-            "typhosj <typhosj@gmx.de>"
-        ],
-        "keywords": [
-            "freekiosk",
-            "kiosk",
-            "tablet",
-            "android",
-            "dashboard",
-            "wall panel"
-        ],
+        "authors": ["typhosj <typhosj@gmx.de>"],
+        "keywords": ["freekiosk", "kiosk", "tablet", "android", "dashboard", "wall panel"],
         "licenseInformation": {
             "type": "free",
             "license": "MIT"
