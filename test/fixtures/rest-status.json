@@ -1,0 +1,47 @@
+{
+    "success": true,
+    "data": {
+        "battery": {
+            "level": 85,
+            "charging": true,
+            "plugged": "ac",
+            "temperature": 25.5,
+            "voltage": 4.12,
+            "health": "good",
+            "technology": "Li-ion"
+        },
+        "screen": { "on": true, "brightness": 75, "screensaverActive": false },
+        "audio": { "volume": 50 },
+        "webview": { "currentUrl": "http://192.168.1.10:8082/vis-2/index.html", "canGoBack": false, "loading": false },
+        "device": {
+            "ip": "192.168.1.50",
+            "hostname": "freekiosk",
+            "version": "2.0.0",
+            "isDeviceOwner": true,
+            "kioskMode": true,
+            "manufacturer": "samsung",
+            "model": "SM-T510",
+            "androidVersion": "11",
+            "apiLevel": 30,
+            "processor": "exynos7904",
+            "deviceName": "gta3xlwifi",
+            "product": "gta3xlwifixx",
+            "uptime": 86400
+        },
+        "wifi": {
+            "ssid": "Home",
+            "signalStrength": -45,
+            "signalLevel": 83,
+            "connected": true,
+            "linkSpeed": 433,
+            "frequency": 5180,
+            "ipAddress": "192.168.1.50"
+        },
+        "rotation": { "enabled": false, "urls": [], "interval": 30, "currentIndex": 0 },
+        "sensors": { "light": 150.5, "proximity": 5, "accelerometer": { "x": 0.1, "y": 9.8, "z": 0.2 } },
+        "autoBrightness": { "enabled": false, "min": 10, "max": 100, "currentLightLevel": 150.5 },
+        "storage": { "totalMB": 29000, "availableMB": 15000, "usedMB": 14000, "usedPercent": 48 },
+        "memory": { "totalMB": 2800, "availableMB": 1200, "usedMB": 1600, "usedPercent": 57, "lowMemory": false }
+    },
+    "timestamp": 1762160000
+}

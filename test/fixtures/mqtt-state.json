@@ -1,0 +1,57 @@
+{
+    "battery": {
+        "level": 85,
+        "charging": true,
+        "plugged": "ac",
+        "temperature": 25.5,
+        "voltage": 4.12,
+        "health": "good",
+        "technology": "Li-ion"
+    },
+    "screen": { "on": true, "brightness": 75, "screensaverActive": false },
+    "audio": { "volume": 50 },
+    "webview": {
+        "currentUrl": "http://192.168.1.10:8082/vis-2/index.html",
+        "canGoBack": false,
+        "loading": false,
+        "motionDetected": true
+    },
+    "device": {
+        "ip": "192.168.1.51",
+        "hostname": "freekiosk",
+        "version": "2.0.0",
+        "isDeviceOwner": false,
+        "kioskMode": true,
+        "motionAlwaysOn": false,
+        "manufacturer": "Lenovo",
+        "model": "TB-X606F",
+        "androidVersion": "10",
+        "apiLevel": 29,
+        "processor": "mt6771",
+        "deviceName": "X606F",
+        "product": "LenovoTB-X606F",
+        "uptime": 3600
+    },
+    "wifi": {
+        "ssid": "Home",
+        "signalStrength": -60,
+        "signalLevel": 55,
+        "connected": true,
+        "linkSpeed": 144,
+        "frequency": 2412,
+        "ipAddress": "192.168.1.51"
+    },
+    "rotation": { "enabled": true, "urls": ["http://a", "http://b"], "interval": 30, "currentIndex": 1 },
+    "sensors": { "light": 12, "proximity": 0, "accelerometer": { "x": 0, "y": 0, "z": 9.8 } },
+    "autoBrightness": { "enabled": true, "min": 10, "max": 100, "currentLightLevel": 12 },
+    "storage": { "totalMB": 29000, "availableMB": 20000, "usedMB": 9000, "usedPercent": 31 },
+    "memory": { "totalMB": 2800, "availableMB": 1400, "usedMB": 1400, "usedPercent": 50, "lowMemory": false },
+    "images": {
+        "screenshotEnabled": true,
+        "screenshotAuto": false,
+        "screenshotInterval": 60,
+        "cameraEnabled": false,
+        "cameraAuto": false,
+        "cameraInterval": 300
+    }
+}
