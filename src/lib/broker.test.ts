@@ -34,6 +34,15 @@ function aedesOf(broker: Broker): EventEmitter {
     return (broker as unknown as { aedes: EventEmitter }).aedes;
 }
 
+async function rejection(promise: Promise<unknown>): Promise<string> {
+    try {
+        await promise;
+    } catch (err) {
+        return String(err);
+    }
+    throw new Error('expected a rejection');
+}
+
 function willPacket(topic: string, payload: string): Record<string, unknown> {
     return { cmd: 'publish', topic, payload: Buffer.from(payload), qos: 1, retain: false, dup: false };
 }
@@ -141,6 +150,16 @@ describe('Broker', () => {
         expect(rec.calls.filter(c => c[0] === 'status')).to.have.length(0);
     });
 
+    it('ignores the empty payload FreeKiosk sends to clear a disabled image stream', async () => {
+        const client = await tablet();
+        await client.publishAsync('freekiosk/kitchen/image/screenshot', Buffer.alloc(0), { retain: true });
+        await client.publishAsync('freekiosk/kitchen/image/camera_back', Buffer.from([9]));
+        await until(() => rec.calls.some(c => c[0] === 'image'));
+        expect(rec.calls.filter(c => c[0] === 'image')).to.deep.equal([
+            ['image', 'kitchen', 'cameraBack', Buffer.from([9])],
+        ]);
+    });
+
     it('ignores unknown tablets and foreign topics without disconnecting', async () => {
         const client = await tablet();
         await client.publishAsync('freekiosk/garage/state', '{}');
@@ -208,6 +227,18 @@ describe('Broker', () => {
         expect(await received).to.deep.equal(['freekiosk/kitchen/set/screen', 'OFF']);
     });
 
+    it('refuses commands while the tablet does not subscribe to them', async () => {
+        const client = await tablet();
+        await client.publishAsync('freekiosk/kitchen/availability', 'online');
+        await until(() => broker.isOnline('kitchen'));
+        // FreeKiosk subscribes to set/# only with "Allow remote control" on.
+        expect(await rejection(broker.publish('kitchen', 'screen', 'OFF'))).to.contain('Allow remote control');
+        await client.subscribeAsync('freekiosk/kitchen/set/#');
+        await broker.publish('kitchen', 'screen', 'OFF');
+        await client.unsubscribeAsync('freekiosk/kitchen/set/#');
+        expect(await rejection(broker.publish('kitchen', 'screen', 'OFF'))).to.contain('Allow remote control');
+    });
+
     it('ignores oversize payloads on unknown suffixes', async () => {
         const client = await tablet();
         await client.publishAsync('freekiosk/kitchen/whatever', 'x'.repeat(70 * 1024));
@@ -256,6 +287,24 @@ describe('Broker', () => {
         await tablet();
     });
 
+    it('closes at once while a connection has not sent CONNECT yet', async () => {
+        const socket = connect(broker.port, '127.0.0.1');
+        socket.on('error', () => undefined);
+        await new Promise<void>(resolve => socket.once('connect', resolve));
+        const started = Date.now();
+        try {
+            await broker.close();
+        } finally {
+            socket.destroy();
+        }
+        expect(Date.now() - started).to.be.below(1000);
+        // afterEach closes the broker again
+        broker = await Broker.start(
+            { port: 0, baseTopic: 'freekiosk', user: 'iob', password: 'secret', topicIds: ['kitchen'] },
+            rec.events,
+        );
+    });
+
     it('rejects start on a port already in use', async () => {
         let code = '';
         try {
@@ -270,12 +319,6 @@ describe('Broker', () => {
     });
 
     it('refuses to publish to an offline tablet', async () => {
-        let message = '';
-        try {
-            await broker.publish('hall', 'reload', 'PRESS');
-        } catch (err) {
-            message = String(err);
-        }
-        expect(message).to.contain('not connected');
+        expect(await rejection(broker.publish('hall', 'reload', 'PRESS'))).to.contain('not connected');
     });
 });

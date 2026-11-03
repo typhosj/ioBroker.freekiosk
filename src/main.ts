@@ -13,6 +13,8 @@ interface Tablet {
     failLogged: boolean;
     poller?: Poller;
     submitStatus: (raw: unknown) => void;
+    /** One write per image kind in flight, the newest image waiting (MQTT tablets push them unasked) */
+    submitImage: Partial<Record<ImageKind, (data: Buffer) => void>>;
 }
 
 function errorText(err: unknown): string {
@@ -90,14 +92,16 @@ class Freekiosk extends utils.Adapter {
                     raw => this.applyStatus(tablet, raw),
                     err => this.log.warn(`${device.name}: status not stored: ${errorText(err)}`),
                 ),
+                submitImage: {},
             };
-            this.tablets.set(device.id, tablet);
-            if (device.transport === 'mqtt') {
-                this.byTopic.set(device.topicId, tablet);
-            }
             await this.createObjects(device);
             if (this.stopping) {
                 return;
+            }
+            // Registered only with its objects in place, so markOffline() never writes a missing state.
+            this.tablets.set(device.id, tablet);
+            if (device.transport === 'mqtt') {
+                this.byTopic.set(device.topicId, tablet);
             }
         }
         if (this.byTopic.size) {
@@ -130,15 +134,16 @@ class Freekiosk extends utils.Adapter {
     private async createObjects(device: DeviceConfig): Promise<void> {
         await this.extendObjectAsync(device.id, { type: 'device', common: { name: device.name }, native: {} });
         const defs = statesFor(device.transport);
+        // extendObject keeps common metadata current across versions; user renames are overwritten.
         for (const channel of new Set(defs.map(def => def.id.split('.')[0]))) {
-            await this.setObjectNotExistsAsync(`${device.id}.${channel}`, {
+            await this.extendObjectAsync(`${device.id}.${channel}`, {
                 type: 'channel',
                 common: { name: CHANNELS[channel] },
                 native: {},
             });
         }
         for (const def of defs) {
-            await this.setObjectNotExistsAsync(`${device.id}.${def.id}`, {
+            await this.extendObjectAsync(`${device.id}.${def.id}`, {
                 type: 'state',
                 common: commonOf(def),
                 native: {},
@@ -178,7 +183,8 @@ class Freekiosk extends utils.Adapter {
                 return;
             }
             if (err instanceof HttpError && err.status === 401) {
-                this.log.error(`${name} (${host}) rejected the API key; polling stops until the instance restarts`);
+                const problem = this.settings?.restApiKey ? 'rejected the API key' : 'requires an API key';
+                this.log.error(`${name} (${host}) ${problem}; polling stops until the instance restarts`);
                 tablet.poller?.stop();
             } else if (!tablet.failLogged) {
                 this.log.warn(`${name} (${host}) not reachable: ${errorText(err)}; retrying every ${intervalSec} s`);
@@ -237,9 +243,11 @@ class Freekiosk extends utils.Adapter {
                     image: (topicId, kind, data) => {
                         const tablet = tabletOf(topicId);
                         if (tablet && !this.stopping) {
-                            this.storeImage(tablet, kind, data, 'jpg').catch(err =>
-                                this.log.warn(`${tablet.config.name}: image not stored: ${errorText(err)}`),
-                            );
+                            const submit = (tablet.submitImage[kind] ??= latestOnly(
+                                (image: Buffer) => this.storeImage(tablet, kind, image, 'jpg'),
+                                err => this.log.warn(`${tablet.config.name}: image not stored: ${errorText(err)}`),
+                            ));
+                            submit(data);
                         }
                     },
                     unknownTablet: topicId =>
@@ -291,6 +299,9 @@ class Freekiosk extends utils.Adapter {
     }
 
     private async storeImage(tablet: Tablet, kind: ImageKind, data: Buffer, ext: 'png' | 'jpg'): Promise<void> {
+        if (this.stopping) {
+            return;
+        }
         const file = `${tablet.config.id}/${kind}.${ext}`;
         await this.writeFileAsync(this.namespace, file, data);
         await this.setStateAsync(`${tablet.config.id}.images.${kind}`, `/${this.namespace}/${file}`, true);

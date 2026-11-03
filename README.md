@@ -43,7 +43,7 @@ One row per tablet, up to 50 rows. A row that fails validation is logged and ski
 
 * **Object ID**: ASCII letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
 * **Transport**: `REST` or `MQTT`.
-* **Host and port** (REST only): the port defaults to 8080. MQTT rows need neither.
+* **Host and port** (REST only): a hostname or IP address without `http://`, path or IPv6 zone (`%wlan0`); the port defaults to 8080. MQTT rows need neither.
 * **Topic ID** (MQTT only): may stay empty when FreeKiosk's device name, in lowercase with spaces as `_`, equals the object ID in lowercase.
 
 ## Security
@@ -69,16 +69,18 @@ Each tablet is a device object named after its ID in the device table.
 | `remote` | D-pad and navigation buttons, key, key combo and text input |
 
 * Buttons: write `true`.
+* `webview.url` takes an http(s) URL.
 * `commands.audioPlay` takes a URL or JSON such as `{"url":"http://...","loop":false,"volume":50}`.
-* `commands.mode` takes `{"mode":"webview","url":"http://..."}`, `{"mode":"external_app","package":"com.example.app"}` or `{"mode":"media_player"}`.
+* `commands.mode` takes `{"mode":"webview","url":"http://..."}`, `{"mode":"external_app","package":"com.example.app"}` or `{"mode":"media_player"}`. A `url` must be http(s).
 * Images are stored in the instance file storage. To show one in vis, use the path from `images.*`; the web adapter serves it as `/freekiosk.0/<id>/<file>`.
-* If nothing happens when you send a command, check "Allow remote control" in FreeKiosk first. With it off, REST refuses commands (the adapter logs a warning), while MQTT commands are dropped silently by FreeKiosk.
-* A command is acknowledged only after the tablet accepted it. If the tablet is offline, the command is dropped with a warning and not queued.
+* If nothing happens when you send a command, check "Allow remote control" in FreeKiosk first. With it off, REST refuses commands and an MQTT tablet does not subscribe to them; in both cases the adapter logs a warning and does not acknowledge the command.
+* A command is acknowledged only after it was delivered: over REST when the tablet answered with success, over MQTT when the broker handed it to the tablet's command subscription. If the tablet is offline, the command is dropped with a warning and not queued.
 
 ## Known limits
 
 * Auto-brightness can be read but not switched; FreeKiosk 2.0.0 has no command for it.
 * The objects of a removed tablet stay until you delete them by hand.
+* The adapter restores the names, roles and units of its objects on every start, so a name changed in the object browser does not last. Custom settings such as history stay.
 * One API key and one broker login are shared by all tablets.
 * No TLS for the broker.
 

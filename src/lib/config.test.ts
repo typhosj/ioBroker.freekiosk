@@ -1,4 +1,6 @@
 import { expect } from 'chai';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { MAX_DEVICES, validateConfig } from './config';
 
 const base = {
@@ -67,10 +69,12 @@ describe('config', () => {
             { ...rest, id: 'g', port: 1.5 },
             { ...rest, id: 'h', host: 'tablet-1.lan', port: 65535 },
             { ...rest, id: 'i', host: 'fe80::1', port: 1 },
+            // isIP accepts a zone, but fetch cannot build a URL from it
+            { ...rest, id: 'j', host: 'fe80::1%wlan0' },
         ];
         const { config, errors } = run({ devices: rows });
         expect(config.devices.map(d => d.id)).to.deep.equal(['h', 'i']);
-        expect(errors).to.have.length(7);
+        expect(errors).to.have.length(8);
     });
 
     it('validates MQTT topic ids and keeps them unique', () => {
@@ -158,6 +162,46 @@ describe('config', () => {
         const { config, errors } = run({ devices: rows });
         expect(config.devices).to.have.length(MAX_DEVICES);
         expect(errors).to.have.length(1);
+    });
+
+    it('agrees with the validators of the admin device table', () => {
+        const table = (
+            JSON.parse(readFileSync(join(__dirname, '../../admin/jsonConfig.json'), 'utf8')) as {
+                items: { tabTablets: { items: { devices: { items: { attr: string; validator?: string }[] } } } };
+            }
+        ).items.tabTablets.items.devices.items;
+        // jsonConfig runs a validator as a function body with the table row as `data`.
+        const checks = table
+            .filter(column => column.validator)
+            .map(column => new Function('data', `return ${column.validator}`) as (row: unknown) => boolean);
+        const rows = [
+            rest,
+            { ...rest, id: 'a-b_C9' },
+            { ...rest, id: 'info' },
+            { ...rest, id: 'a b' },
+            { ...rest, id: 'ä' },
+            { ...rest, id: 'x'.repeat(33) },
+            { ...rest, id: '' },
+            { ...rest, host: 'tablet-1.lan' },
+            { ...rest, host: 'fe80::1' },
+            { ...rest, host: 'fe80::1%wlan0' },
+            { ...rest, host: 'http://tablet' },
+            { ...rest, host: 'tablet/x' },
+            { ...rest, host: 'tab_let' },
+            { ...rest, host: '' },
+            mqtt,
+            { ...mqtt, topicId: 'my_tablet' },
+            { ...mqtt, topicId: 'a/b' },
+            { ...mqtt, topicId: 'a b' },
+            { ...mqtt, topicId: 'a+b' },
+        ];
+        for (const row of rows) {
+            const runtime = run({ devices: [row] }).config.devices.length === 1;
+            expect(
+                checks.every(check => check(row)),
+                JSON.stringify(row),
+            ).to.equal(runtime);
+        }
     });
 
     it('treats a missing or broken device list as empty', () => {

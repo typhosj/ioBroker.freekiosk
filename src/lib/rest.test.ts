@@ -127,6 +127,13 @@ describe('rest client', () => {
         await sendRest(target, { method: 'POST', path: '/api/reload' }, never);
     });
 
+    it('keeps the status code of an error answer with an oversized body', async () => {
+        handler = (_req, _body, res) => res.writeHead(403).end('x'.repeat(10_000));
+        const err = await rejection(sendRest(target, { method: 'POST', path: '/api/reload' }, never));
+        expect(err).to.be.instanceOf(HttpError);
+        expect((err as HttpError).status).to.equal(403);
+    });
+
     it('rejects a status body over the size limit', async () => {
         handler = (_req, _body, res) => res.writeHead(200).end('x'.repeat(STATUS_MAX_BYTES + 1));
         expect(String(await rejection(fetchStatus(target, never)))).to.contain('larger than');

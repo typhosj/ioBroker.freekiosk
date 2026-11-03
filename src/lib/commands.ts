@@ -89,7 +89,6 @@ const TEXTS = new Map<string, { rest: string; field: string; mqtt: string }>([
     ['commands.toast', { rest: '/api/toast', field: 'text', mqtt: 'toast' }],
     ['commands.executeJs', { rest: '/api/js', field: 'code', mqtt: 'execute_js' }],
     ['remote.text', { rest: '/api/remote/text', field: 'text', mqtt: 'keyboard_text' }],
-    ['webview.url', { rest: '/api/url', field: 'url', mqtt: 'url' }],
 ]);
 
 function make(rest: RestRequest | undefined, entity: string, payload: string, ackValue: StateValue): CommandResult {
@@ -155,8 +154,8 @@ function displayMode(value: unknown): CommandResult {
     }
     const body: Record<string, unknown> = { mode: spec.mode };
     if (spec.url !== undefined) {
-        if (typeof spec.url !== 'string' || !spec.url) {
-            return { error: 'url must be a non-empty text' };
+        if (!isHttpUrl(spec.url)) {
+            return { error: 'url must be an http(s) URL' };
         }
         body.url = spec.url;
     }
@@ -219,6 +218,17 @@ export function buildCommand(id: string, value: unknown): CommandResult {
         return make({ method: 'POST', path: plain.rest, body: { [plain.field]: text } }, plain.mqtt, text, text);
     }
     switch (id) {
+        case 'webview.url': {
+            const text = textOf(value);
+            if (typeof text !== 'string') {
+                return text;
+            }
+            const url = text.trim();
+            if (!isHttpUrl(url)) {
+                return { error: 'needs an http(s) URL' };
+            }
+            return make({ method: 'POST', path: '/api/url', body: { url } }, 'url', url, url);
+        }
         case 'commands.launchApp': {
             const text = textOf(value);
             if (typeof text !== 'string') {

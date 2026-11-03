@@ -17,5 +17,8 @@
     "Base topic": "Topic de base",
     "User": "Utilisateur",
     "Password": "Mot de passe",
-    "mqttHint": "Saisissez cet hôte ioBroker, le port, l'utilisateur et le mot de passe dans FreeKiosk sous Paramètres → Avancé → MQTT. Le broker ne tourne que si au moins une tablette MQTT est configurée. N'exposez pas le port sur Internet : la connexion n'est pas chiffrée."
+    "mqttHint": "Saisissez cet hôte ioBroker, le port, l'utilisateur et le mot de passe dans FreeKiosk sous Paramètres → Avancé → MQTT. Le broker ne tourne que si au moins une tablette MQTT est configurée. N'exposez pas le port sur Internet : la connexion n'est pas chiffrée.",
+    "idError": "1 à 32 caractères A-Z, a-z, 0-9, _ ou -, pas info",
+    "hostError": "Nom d’hôte ou adresse IP, sans http://, chemin ni %",
+    "topicIdError": "Pas de /, +, # ni d’espaces"
 }

@@ -22,6 +22,7 @@ describe('commands', () => {
             'commands.launchApp': 'com.example.app',
             'commands.audioPlay': 'https://example.com/a.mp3',
             'commands.mode': '{"mode":"webview"}',
+            'webview.url': 'https://example.com/',
             'remote.key': 'enter',
             'remote.combo': 'ctrl+c',
         };
@@ -99,11 +100,22 @@ describe('commands', () => {
             ackValue: 'Hallo',
         });
         expect(ok('commands.executeJs', 'location.reload()').rest?.body).to.deep.equal({ code: 'location.reload()' });
-        expect(ok('webview.url', 'http://x').mqtt).to.deep.equal({ entity: 'url', payload: 'http://x' });
         ok('commands.toast', 'ä'.repeat(MAX_TEXT_BYTES / 2));
         error('commands.toast', 'ä'.repeat(MAX_TEXT_BYTES / 2 + 1));
         error('commands.toast', '   ');
         error('commands.toast', 5);
+    });
+
+    it('navigates only to http(s) URLs', () => {
+        expect(ok('webview.url', ' https://x/y ')).to.deep.equal({
+            rest: { method: 'POST', path: '/api/url', body: { url: 'https://x/y' } },
+            mqtt: { entity: 'url', payload: 'https://x/y' },
+            ackValue: 'https://x/y',
+        });
+        expect(ok('webview.url', 'HTTP://x').mqtt?.payload).to.equal('HTTP://x');
+        for (const value of ['javascript:alert(1)', 'file:///sdcard/a.html', 'x', 'http://', '', 5]) {
+            error('webview.url', value);
+        }
     });
 
     it('validates app package names', () => {
@@ -149,6 +161,8 @@ describe('commands', () => {
             'webview',
             '{"mode":"kiosk"}',
             '{"mode":"webview","url":5}',
+            '{"mode":"webview","url":"file:///sdcard/a.html"}',
+            '{"mode":"webview","url":"javascript:alert(1)"}',
             '{"mode":"external_app","package":"x"}',
         ]) {
             error('commands.mode', value);

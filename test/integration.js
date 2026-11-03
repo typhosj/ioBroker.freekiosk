@@ -10,6 +10,7 @@ const restStatus = require('./fixtures/rest-status.json');
 const mqttState = require('./fixtures/mqtt-state.json');
 
 const DUMP = path.join(os.tmpdir(), 'freekiosk.0.json');
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
 
 function call(fn, ...args) {
     return new Promise((resolve, reject) => fn(...args, (err, result) => (err ? reject(err) : resolve(result))));
@@ -52,8 +53,15 @@ tests.integration(path.join(__dirname, '..'), {
                     req.on('data', chunk => (body += chunk));
                     req.on('end', () => {
                         requests.push(`${req.method} ${req.url} ${body}`);
-                        res.writeHead(200, { 'Content-Type': 'application/json' });
-                        res.end(JSON.stringify(req.url === '/api/status' ? restStatus : { success: true, data: {} }));
+                        if (req.url === '/api/screenshot') {
+                            res.writeHead(200, { 'Content-Type': 'image/png' }).end(PNG);
+                        } else if (req.url === '/api/reboot') {
+                            res.writeHead(403, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify({ success: false, error: 'Remote control is disabled' }));
+                        } else {
+                            res.writeHead(200, { 'Content-Type': 'application/json' });
+                            res.end(JSON.stringify(req.url === '/api/status' ? restStatus : { success: true, data: {} }));
+                        }
                     });
                 });
                 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -83,20 +91,47 @@ tests.integration(path.join(__dirname, '..'), {
                 const stored = await call(harness.objects.getObject.bind(harness.objects), 'system.adapter.freekiosk.0');
                 expect(stored.native.mqttPassword).to.be.a('string').and.not.equal('').and.not.equal('secret');
                 expect(stored.native.restApiKey).to.be.a('string').and.not.equal('').and.not.equal('k3y');
+                // Leftovers of an earlier version: an MQTT-only state of a tablet now on REST, and a state
+                // with outdated metadata.
+                const setObject = (id, obj) => call(harness.objects.setObject.bind(harness.objects), id, obj);
+                const stale = { type: 'state', common: { name: 'x', type: 'boolean', role: 'state', read: true, write: false }, native: {} };
+                await setObject('freekiosk.0.hall.sensors.motion', stale);
+                await setObject('freekiosk.0.hall.battery.level', { ...stale, common: { ...stale.common, type: 'number' } });
                 await harness.startAdapterAndWait();
                 const get = async id => (await call(harness.states.getState.bind(harness.states), id))?.val;
+                const ackOf = async id => (await call(harness.states.getState.bind(harness.states), id))?.ack;
                 const set = (id, val) => call(harness.states.setState.bind(harness.states), id, { val, ack: false });
 
                 await waitFor(() => get('freekiosk.0.hall.battery.level'), 85, 15_000);
                 expect(await get('freekiosk.0.hall.info.online')).to.equal(true);
+                const level = await call(harness.objects.getObject.bind(harness.objects), 'freekiosk.0.hall.battery.level');
+                expect(level.common).to.include({ role: 'value.battery', unit: '%', name: 'Battery level' });
+
+                // REST screenshot: downloaded, stored as PNG, path and time set, button acknowledged.
+                await set('freekiosk.0.hall.commands.screenshot', true);
+                await waitFor(() => get('freekiosk.0.hall.images.screenshot'), '/freekiosk.0/hall/screenshot.png', 10_000);
+                const file = await call(harness.objects.readFile.bind(harness.objects), 'freekiosk.0', 'hall/screenshot.png');
+                expect(Buffer.from(file)).to.deep.equal(PNG);
+                expect(await get('freekiosk.0.hall.images.screenshotTime')).to.be.a('number');
+                expect(await ackOf('freekiosk.0.hall.commands.screenshot')).to.equal(true);
+
+                // REST 403: sent, refused, not acknowledged.
+                await set('freekiosk.0.hall.commands.reboot', true);
+                await waitFor(async () => requests.some(r => r.startsWith('POST /api/reboot')), true, 10_000);
+                await sleep(1000);
+                expect(await ackOf('freekiosk.0.hall.commands.reboot')).to.equal(false);
 
                 const tablet = await mqtt.connectAsync(`mqtt://127.0.0.1:${mqttPort}`, { username: 'iob', password: 'secret', reconnectPeriod: 0 });
                 try {
-                    await tablet.subscribeAsync('freekiosk/kitchen/set/#');
                     await tablet.publishAsync('freekiosk/kitchen/availability', 'online', { qos: 1, retain: true });
                     await tablet.publishAsync('freekiosk/kitchen/state', JSON.stringify(mqttState), { retain: true });
                     await waitFor(() => get('freekiosk.0.kitchen.sensors.motion'), true, 10_000);
                     await waitFor(() => get('freekiosk.0.info.connection'), true, 10_000);
+                    // Without the set/# subscription ("Allow remote control" off) a command is not acknowledged.
+                    await set('freekiosk.0.kitchen.audio.volume', 10);
+                    await sleep(1000);
+                    expect(await ackOf('freekiosk.0.kitchen.audio.volume')).to.equal(false);
+                    await tablet.subscribeAsync('freekiosk/kitchen/set/#');
 
                     await set('freekiosk.0.hall.screen.brightness', 40);
                     await waitFor(async () => requests.includes('POST /api/brightness {"value":40}'), true, 10_000);
@@ -109,6 +144,10 @@ tests.integration(path.join(__dirname, '..'), {
                 }
                 await waitFor(() => get('freekiosk.0.kitchen.info.online'), false, 10_000);
                 expect(await get('freekiosk.0.info.connection')).to.equal(false);
+                // Offline: dropped, not acknowledged.
+                await set('freekiosk.0.kitchen.screen.on', true);
+                await sleep(1000);
+                expect(await ackOf('freekiosk.0.kitchen.screen.on')).to.equal(false);
 
                 const list = await call(harness.objects.getObjectList.bind(harness.objects), {
                     startkey: 'freekiosk.0.',

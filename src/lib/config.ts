@@ -132,8 +132,9 @@ export function validateConfig(native: Record<string, unknown>): { config: Insta
         if (row.transport === 'rest') {
             const host = text(row.host);
             const restPort = port(row.port);
-            if (!isIP(host) && !HOSTNAME_RE.test(host)) {
-                skip('host must be a hostname or IP address without http:// and without a path');
+            // An IPv6 zone (fe80::1%wlan0) passes isIP, but no URL can be built from it.
+            if (host.includes('%') || (!isIP(host) && !HOSTNAME_RE.test(host))) {
+                skip('host must be a hostname or IP address without http://, path or IPv6 zone');
                 continue;
             }
             if (restPort === undefined) {

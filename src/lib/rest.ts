@@ -62,14 +62,16 @@ async function request(
         redirect: 'error', // the API key must never follow a redirect to another origin
         signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
     });
-    if (response.ok && maxBytes === 0) {
+    if (!response.ok) {
+        // An oversized or broken error body must not hide the status code.
+        const body = await readLimited(response, ERROR_MAX_BYTES).catch(() => Buffer.alloc(0));
+        throw new HttpError(response.status, `HTTP ${response.status}: ${errorText(body)}`);
+    }
+    if (maxBytes === 0) {
         await response.body?.cancel(); // a command answer is not needed, only its status
         return { type: '', body: Buffer.alloc(0) };
     }
-    const body = await readLimited(response, response.ok ? maxBytes : ERROR_MAX_BYTES);
-    if (!response.ok) {
-        throw new HttpError(response.status, `HTTP ${response.status}: ${errorText(body)}`);
-    }
+    const body = await readLimited(response, maxBytes);
     return { type: response.headers.get('content-type') ?? '', body };
 }
 

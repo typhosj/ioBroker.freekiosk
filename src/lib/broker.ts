@@ -108,6 +108,8 @@ function preLoginGuard(this: Socket): void {
 export class Broker {
     private readonly owner = new Map<string, Client>();
     private readonly boundTo = new WeakMap<Client, string>();
+    /** Clients subscribed to their `set/#`; FreeKiosk subscribes only with remote control allowed. */
+    private readonly listening = new WeakSet<Client>();
     private readonly availability = new Map<string, string>();
     private readonly lastOnline = new Map<string, boolean>();
     private readonly reported = new Set<string>();
@@ -120,6 +122,7 @@ export class Broker {
     private constructor(
         private readonly aedes: Aedes,
         private readonly server: Server,
+        private readonly sockets: Set<Socket>,
         private readonly opts: BrokerOptions,
         private readonly events: BrokerEvents,
     ) {
@@ -176,6 +179,18 @@ export class Broker {
                 this.bind(client, parsed.topicId) === null;
             done(null, allowed ? subscription : null);
         };
+        aedes.on('subscribe', (subscriptions, client) => {
+            // aedes reports a refused subscription with qos 128, outside the typed QoS range.
+            if (subscriptions.some(s => (s.qos as number) !== 128 && s.topic === this.commandFilter(client))) {
+                this.listening.add(client);
+            }
+        });
+        aedes.on('unsubscribe', (topics, client) => {
+            const filter = this.commandFilter(client);
+            if (filter !== undefined && topics.includes(filter)) {
+                this.listening.delete(client);
+            }
+        });
         aedes.on('publish', (packet: AedesPublishPacket, client: Client | null) => {
             if (client) {
                 this.onPublish(packet, client);
@@ -201,13 +216,17 @@ export class Broker {
      */
     static async start(opts: BrokerOptions, events: BrokerEvents): Promise<Broker> {
         const aedes = await Aedes.createBroker();
+        // aedes.close() ends only clients that sent CONNECT; close() destroys the rest itself.
+        const sockets = new Set<Socket>();
         const server = createServer(socket => {
+            sockets.add(socket);
+            socket.once('close', () => sockets.delete(socket));
             // Registered before aedes' own listener, so the guard sees each chunk first.
             socket.on('readable', preLoginGuard);
             aedes.handle(socket);
         });
         server.maxConnections = opts.topicIds.length + 5;
-        const broker = new Broker(aedes, server, opts, events);
+        const broker = new Broker(aedes, server, sockets, opts, events);
         try {
             await new Promise<void>((resolve, reject) => {
                 server.once('error', reject);
@@ -239,7 +258,8 @@ export class Broker {
     }
 
     /**
-     * Publishes a command to `<base>/<topicId>/set/<entity>` with QoS 1, not retained.
+     * Publishes a command to `<base>/<topicId>/set/<entity>` with QoS 1, not retained. Rejects when
+     * the tablet is offline or does not subscribe to its commands.
      *
      * @param topicId tablet topic id
      * @param entity command name
@@ -248,6 +268,10 @@ export class Broker {
     async publish(topicId: string, entity: string, payload: string): Promise<void> {
         if (!this.isOnline(topicId)) {
             throw new Error('tablet is not connected');
+        }
+        const owner = this.owner.get(topicId);
+        if (!owner || !this.listening.has(owner)) {
+            throw new Error('tablet takes no commands; turn on "Allow remote control" in FreeKiosk');
         }
         await new Promise<void>((resolve, reject) => {
             this.aedes.publish(
@@ -267,7 +291,15 @@ export class Broker {
     /** Stops the broker and drops all clients. */
     async close(): Promise<void> {
         await new Promise<void>(resolve => this.aedes.close(() => resolve()));
+        for (const socket of this.sockets) {
+            socket.destroy();
+        }
         await new Promise<void>(resolve => this.server.close(() => resolve()));
+    }
+
+    private commandFilter(client: Client): string | undefined {
+        const topicId = this.boundTo.get(client);
+        return topicId === undefined ? undefined : `${this.opts.baseTopic}/${topicId}/set/#`;
     }
 
     private bind(client: Client, topicId: string): Error | null {
@@ -299,6 +331,9 @@ export class Broker {
         const kind = IMAGE_SUFFIXES.get(suffix);
         if (!kind && suffix !== 'availability' && suffix !== 'state') {
             return; // unknown suffix: nothing to size-check or report
+        }
+        if (kind && !payload.length) {
+            return; // FreeKiosk clears the retained image of a disabled stream; the last image stays
         }
         const limit = kind ? IMAGE_MAX_BYTES : STATE_MAX_BYTES;
         if (payload.length > limit) {
