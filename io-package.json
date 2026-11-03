@@ -1,0 +1,110 @@
+{
+    "common": {
+        "name": "freekiosk",
+        "version": "0.0.1",
+        "news": {
+            "0.0.1": {
+                "en": "initial release",
+                "de": "Erstveröffentlichung",
+                "ru": "Начальная версия",
+                "pt": "lançamento inicial",
+                "nl": "Eerste uitgave",
+                "fr": "Première version",
+                "it": "Versione iniziale",
+                "es": "Versión inicial",
+                "pl": "Pierwsze wydanie",
+                "uk": "Початкова версія",
+                "zh-cn": "首次出版"
+            }
+        },
+        "titleLang": {
+            "en": "FreeKiosk",
+            "de": "FreeKiosk",
+            "ru": "FreeKiosk",
+            "pt": "Quiosque Grátis",
+            "nl": "Gratis Kiosk",
+            "fr": "Kiosque gratuit",
+            "it": "FreeKiosk",
+            "es": "Quiosco gratuito",
+            "pl": "Bezpłatny Kiosk",
+            "uk": "FreeKiosk",
+            "zh-cn": "免费信息亭"
+        },
+        "desc": {
+            "en": "Monitor and control Android tablets running FreeKiosk over REST or MQTT",
+            "de": "Überwachen und steuern Sie Android-Tablets, auf denen FreeKiosk über REST oder MQTT ausgeführt wird",
+            "ru": "Мониторинг и управление планшетами Android с FreeKiosk через REST или MQTT.",
+            "pt": "Monitore e controle tablets Android executando FreeKiosk via REST ou MQTT",
+            "nl": "Bewaak en beheer Android-tablets met FreeKiosk via REST of MQTT",
+            "fr": "Surveillez et contrôlez les tablettes Android exécutant FreeKiosk via REST ou MQTT",
+            "it": "Monitora e controlla i tablet Android che eseguono FreeKiosk su REST o MQTT",
+            "es": "Supervise y controle tabletas Android que ejecutan FreeKiosk a través de REST o MQTT",
+            "pl": "Monitoruj i kontroluj tablety z Androidem, na których działa FreeKiosk poprzez REST lub MQTT",
+            "uk": "Контролюйте та керуйте планшетами Android, які працюють під керуванням FreeKiosk через REST або MQTT",
+            "zh-cn": "通过 REST 或 MQTT 监视和控制运行 FreeKiosk 的 Android 平板电脑"
+        },
+        "authors": ["typhosj <typhosj@gmx.de>"],
+        "keywords": ["freekiosk", "kiosk", "tablet", "android", "dashboard", "wall panel"],
+        "licenseInformation": {
+            "type": "free",
+            "license": "MIT"
+        },
+        "platform": "Javascript/Node.js",
+        "icon": "freekiosk.png",
+        "enabled": true,
+        "extIcon": "https://raw.githubusercontent.com/typhosj/ioBroker.freekiosk/main/admin/freekiosk.png",
+        "readme": "https://github.com/typhosj/ioBroker.freekiosk/blob/main/README.md",
+        "loglevel": "info",
+        "tier": 3,
+        "mode": "daemon",
+        "type": "hardware",
+        "compact": true,
+        "connectionType": "local",
+        "dataSource": "poll",
+        "adminUI": {
+            "config": "json"
+        },
+        "dependencies": [
+            {
+                "js-controller": ">=6.0.11"
+            }
+        ],
+        "globalDependencies": [
+            {
+                "admin": ">=7.0.23"
+            }
+        ]
+    },
+    "native": {
+        "mqttPort": 1886,
+        "mqttBaseTopic": "freekiosk",
+        "mqttUser": "",
+        "mqttPassword": "",
+        "restInterval": 30,
+        "restApiKey": ""
+    },
+    "objects": [],
+    "instanceObjects": [
+        {
+            "_id": "info",
+            "type": "channel",
+            "common": {
+                "name": "Information"
+            },
+            "native": {}
+        },
+        {
+            "_id": "info.connection",
+            "type": "state",
+            "common": {
+                "role": "indicator.connected",
+                "name": "Device or service connected",
+                "type": "boolean",
+                "read": true,
+                "write": false,
+                "def": false
+            },
+            "native": {}
+        }
+    ]
+}

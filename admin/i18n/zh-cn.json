@@ -1,0 +1,9 @@
+{
+    "freekiosk adapter settings": "freekiosk的适配器设置",
+    "MQTT port": "MQTT 端口",
+    "MQTT base topic": "MQTT 基础主题",
+    "MQTT user": "MQTT 用户",
+    "MQTT password": "MQTT 密码",
+    "REST poll interval (s)": "REST 轮询间隔（秒）",
+    "REST API key": "REST API 密钥"
+}

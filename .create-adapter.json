@@ -1,0 +1,75 @@
+{
+    "cli": true,
+    "target": "directory",
+    "adapterName": "freekiosk",
+    "title": "FreeKiosk",
+    "description": "Monitor and control Android tablets running FreeKiosk over REST or MQTT",
+    "keywords": ["freekiosk", "kiosk", "tablet", "android", "dashboard", "wall panel"],
+    "contributors": [],
+    "expert": "yes",
+    "features": ["adapter"],
+    "adminFeatures": [],
+    "type": "hardware",
+    "startMode": "daemon",
+    "connectionType": "local",
+    "dataSource": "poll",
+    "connectionIndicator": "yes",
+    "adapterSettings": [
+        {
+            "key": "mqttPort",
+            "defaultValue": 1886,
+            "inputType": "number",
+            "label": "MQTT port"
+        },
+        {
+            "key": "mqttBaseTopic",
+            "defaultValue": "freekiosk",
+            "inputType": "text",
+            "label": "MQTT base topic"
+        },
+        {
+            "key": "mqttUser",
+            "defaultValue": "",
+            "inputType": "text",
+            "label": "MQTT user"
+        },
+        {
+            "key": "mqttPassword",
+            "defaultValue": "",
+            "inputType": "text",
+            "label": "MQTT password"
+        },
+        {
+            "key": "restInterval",
+            "defaultValue": 30,
+            "inputType": "number",
+            "label": "REST poll interval (s)"
+        },
+        {
+            "key": "restApiKey",
+            "defaultValue": "",
+            "inputType": "text",
+            "label": "REST API key"
+        }
+    ],
+    "language": "TypeScript",
+    "nodeVersion": "22",
+    "adminUi": "json",
+    "tools": ["ESLint", "type checking", "Prettier"],
+    "eslintConfig": "official",
+    "i18n": "JSON",
+    "releaseScript": "yes",
+    "devServer": "no",
+    "indentation": "Space (4)",
+    "quotes": "single",
+    "authorName": "typhosj",
+    "authorGithub": "typhosj",
+    "authorEmail": "typhosj@gmx.de",
+    "gitRemoteProtocol": "HTTPS",
+    "gitCommit": "no",
+    "defaultBranch": "main",
+    "license": "MIT License",
+    "dependabot": "yes",
+    "replay": "C:\\Users\\manuel\\Documents\\repo\\iobroker-adapters\\freekiosk\\.create-adapter.json",
+    "creatorVersion": "3.1.5"
+}

@@ -1,0 +1,66 @@
+{
+    "i18n": true,
+    "type": "panel",
+    "items": {
+        "mqttPort": {
+            "type": "number",
+            "label": "MQTT port",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 4,
+            "xl": 4
+        },
+        "mqttBaseTopic": {
+            "type": "text",
+            "label": "MQTT base topic",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 4,
+            "xl": 4
+        },
+        "mqttUser": {
+            "type": "text",
+            "label": "MQTT user",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 4,
+            "xl": 4
+        },
+        "mqttPassword": {
+            "type": "text",
+            "label": "MQTT password",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 4,
+            "xl": 4
+        },
+        "restInterval": {
+            "type": "number",
+            "label": "REST poll interval (s)",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 4,
+            "xl": 4
+        },
+        "restApiKey": {
+            "type": "text",
+            "label": "REST API key",
+            "newLine": true,
+            "xs": 12,
+            "sm": 12,
+            "md": 6,
+            "lg": 4,
+            "xl": 4
+        }
+    }
+}

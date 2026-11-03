@@ -1,0 +1,9 @@
+{
+    "freekiosk adapter settings": "Adaptereinstellungen für freekiosk",
+    "MQTT port": "MQTT-Port",
+    "MQTT base topic": "MQTT-Basisthema",
+    "MQTT user": "MQTT-Benutzer",
+    "MQTT password": "MQTT-Passwort",
+    "REST poll interval (s)": "REST-Abfrageintervall (s)",
+    "REST API key": "REST-API-Schlüssel"
+}
