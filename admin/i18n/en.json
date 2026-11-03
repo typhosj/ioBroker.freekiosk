@@ -1,9 +1,21 @@
 {
-    "freekiosk adapter settings": "Adapter settings for freekiosk",
-    "MQTT port": "MQTT port",
-    "MQTT base topic": "MQTT base topic",
-    "MQTT user": "MQTT user",
-    "MQTT password": "MQTT password",
-    "REST poll interval (s)": "REST poll interval (s)",
-    "REST API key": "REST API key"
+    "Tablets": "Tablets",
+    "devicesHelp": "One row per tablet. Object ID: letters, digits, _ and -. REST tablets need host and port, MQTT tablets the topic ID (FreeKiosk's device name in lowercase, spaces as _).",
+    "Enabled": "Enabled",
+    "Name": "Name",
+    "Object ID": "Object ID",
+    "Transport": "Transport",
+    "Host (REST)": "Host (REST)",
+    "Port (REST)": "Port (REST)",
+    "Topic ID (MQTT)": "Topic ID (MQTT)",
+    "REST": "REST",
+    "MQTT": "MQTT",
+    "Poll interval (s)": "Poll interval (s)",
+    "API key": "API key",
+    "restApiKeyHelp": "The key set in FreeKiosk under Settings → Advanced → REST API. Leave empty if none is set.",
+    "Broker port": "Broker port",
+    "Base topic": "Base topic",
+    "User": "User",
+    "Password": "Password",
+    "mqttHint": "Enter this ioBroker host, the port, user and password in FreeKiosk under Settings → Advanced → MQTT. The broker runs only while at least one MQTT tablet is configured. Do not expose the port to the internet: the connection is not encrypted."
 }

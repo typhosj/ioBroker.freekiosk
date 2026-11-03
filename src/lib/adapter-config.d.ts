@@ -1,19 +1,15 @@
-// This file extends the AdapterConfig type from "@iobroker/types"
-// using the actual properties present in io-package.json
-// in order to provide typings for adapter.config properties
-
-import { native } from '../../io-package.json';
-
-type _AdapterConfig = typeof native;
-
-// Augment the globally declared type ioBroker.AdapterConfig
+// This file extends the AdapterConfig type from "@types/iobroker"
 declare global {
     namespace ioBroker {
-        interface AdapterConfig extends _AdapterConfig {
-            // Do not enter anything here!
+        interface AdapterConfig {
+            mqttPort: number;
+            mqttBaseTopic: string;
+            mqttUser: string;
+            mqttPassword: string;
+            restInterval: number;
+            restApiKey: string;
+            devices: unknown[];
         }
     }
 }
-
-// this is required so the above AdapterConfig is found by TypeScript / type checking
 export {};

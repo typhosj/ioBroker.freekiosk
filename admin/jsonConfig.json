@@ -1,66 +1,57 @@
 {
     "i18n": true,
-    "type": "panel",
+    "type": "tabs",
     "items": {
-        "mqttPort": {
-            "type": "number",
-            "label": "MQTT port",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+        "tabTablets": {
+            "type": "panel",
+            "label": "Tablets",
+            "items": {
+                "devices": {
+                    "type": "table",
+                    "sm": 12,
+                    "noDelete": false,
+                    "label": "Tablets",
+                    "help": "devicesHelp",
+                    "items": [
+                        { "type": "checkbox", "attr": "enabled", "title": "Enabled", "width": "5%", "default": true },
+                        { "type": "text", "attr": "name", "title": "Name", "width": "15%", "default": "" },
+                        { "type": "text", "attr": "id", "title": "Object ID", "width": "15%", "default": "", "maxLength": 32 },
+                        {
+                            "type": "select",
+                            "attr": "transport",
+                            "title": "Transport",
+                            "width": "10%",
+                            "default": "rest",
+                            "options": [
+                                { "label": "REST", "value": "rest" },
+                                { "label": "MQTT", "value": "mqtt" }
+                            ]
+                        },
+                        { "type": "text", "attr": "host", "title": "Host (REST)", "width": "20%", "default": "" },
+                        { "type": "number", "attr": "port", "title": "Port (REST)", "width": "10%", "default": 8080, "min": 1, "max": 65535 },
+                        { "type": "text", "attr": "topicId", "title": "Topic ID (MQTT)", "width": "15%", "default": "" }
+                    ]
+                }
+            }
         },
-        "mqttBaseTopic": {
-            "type": "text",
-            "label": "MQTT base topic",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+        "tabRest": {
+            "type": "panel",
+            "label": "REST",
+            "items": {
+                "restInterval": { "type": "number", "label": "Poll interval (s)", "min": 5, "max": 3600, "default": 30, "sm": 12, "md": 4 },
+                "restApiKey": { "type": "password", "label": "API key", "help": "restApiKeyHelp", "sm": 12, "md": 8 }
+            }
         },
-        "mqttUser": {
-            "type": "text",
-            "label": "MQTT user",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
-        },
-        "mqttPassword": {
-            "type": "text",
-            "label": "MQTT password",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
-        },
-        "restInterval": {
-            "type": "number",
-            "label": "REST poll interval (s)",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
-        },
-        "restApiKey": {
-            "type": "text",
-            "label": "REST API key",
-            "newLine": true,
-            "xs": 12,
-            "sm": 12,
-            "md": 6,
-            "lg": 4,
-            "xl": 4
+        "tabMqtt": {
+            "type": "panel",
+            "label": "MQTT",
+            "items": {
+                "mqttPort": { "type": "number", "label": "Broker port", "min": 1, "max": 65535, "default": 1886, "sm": 12, "md": 4 },
+                "mqttBaseTopic": { "type": "text", "label": "Base topic", "default": "freekiosk", "sm": 12, "md": 8 },
+                "mqttUser": { "type": "text", "label": "User", "sm": 12, "md": 4 },
+                "mqttPassword": { "type": "password", "label": "Password", "sm": 12, "md": 8 },
+                "mqttHint": { "type": "staticText", "text": "mqttHint", "sm": 12 }
+            }
         }
     }
 }

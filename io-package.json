@@ -18,8 +18,8 @@
             }
         },
         "titleLang": {
-            "en": "FreeKiosk",
-            "de": "FreeKiosk",
+            "en": "FreeKiosk – Android kiosk tablets",
+            "de": "FreeKiosk – Android-Kiosk-Tablets",
             "ru": "FreeKiosk",
             "pt": "Quiosque Grátis",
             "nl": "Gratis Kiosk",
@@ -32,7 +32,7 @@
         },
         "desc": {
             "en": "Monitor and control Android tablets running FreeKiosk over REST or MQTT",
-            "de": "Überwachen und steuern Sie Android-Tablets, auf denen FreeKiosk über REST oder MQTT ausgeführt wird",
+            "de": "Android-Tablets mit FreeKiosk über REST oder MQTT überwachen und steuern",
             "ru": "Мониторинг и управление планшетами Android с FreeKiosk через REST или MQTT.",
             "pt": "Monitore e controle tablets Android executando FreeKiosk via REST ou MQTT",
             "nl": "Bewaak en beheer Android-tablets met FreeKiosk via REST of MQTT",
@@ -43,8 +43,17 @@
             "uk": "Контролюйте та керуйте планшетами Android, які працюють під керуванням FreeKiosk через REST або MQTT",
             "zh-cn": "通过 REST 或 MQTT 监视和控制运行 FreeKiosk 的 Android 平板电脑"
         },
-        "authors": ["typhosj <typhosj@gmx.de>"],
-        "keywords": ["freekiosk", "kiosk", "tablet", "android", "dashboard", "wall panel"],
+        "authors": [
+            "typhosj <typhosj@gmx.de>"
+        ],
+        "keywords": [
+            "freekiosk",
+            "kiosk",
+            "tablet",
+            "android",
+            "dashboard",
+            "wall panel"
+        ],
         "licenseInformation": {
             "type": "free",
             "license": "MIT"
@@ -71,20 +80,38 @@
         ],
         "globalDependencies": [
             {
-                "admin": ">=7.0.23"
+                "admin": ">=7.6.17"
             }
         ]
     },
+    "encryptedNative": [
+        "mqttPassword",
+        "restApiKey"
+    ],
+    "protectedNative": [
+        "mqttPassword",
+        "restApiKey"
+    ],
     "native": {
         "mqttPort": 1886,
         "mqttBaseTopic": "freekiosk",
         "mqttUser": "",
         "mqttPassword": "",
         "restInterval": 30,
-        "restApiKey": ""
+        "restApiKey": "",
+        "devices": []
     },
     "objects": [],
     "instanceObjects": [
+        {
+            "_id": "",
+            "type": "meta",
+            "common": {
+                "name": "FreeKiosk images",
+                "type": "meta.user"
+            },
+            "native": {}
+        },
         {
             "_id": "info",
             "type": "channel",
