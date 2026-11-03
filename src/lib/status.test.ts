@@ -70,6 +70,19 @@ describe('status', () => {
         ]);
     });
 
+    it('accepts the inclusive range limits and rejects one step beyond', () => {
+        const low = mapStatus({ battery: { level: 0 }, images: { screenshotInterval: 5 } }, 'mqtt');
+        expect(Object.fromEntries(low.values)).to.deep.equal({ 'battery.level': 0, 'images.screenshotInterval': 5 });
+        const high = mapStatus({ battery: { level: 100 }, images: { screenshotInterval: 3600 } }, 'mqtt');
+        expect(Object.fromEntries(high.values)).to.deep.equal({
+            'battery.level': 100,
+            'images.screenshotInterval': 3600,
+        });
+        const beyond = mapStatus({ images: { screenshotInterval: 3601 } }, 'mqtt');
+        expect(beyond.values.size).to.equal(0);
+        expect(beyond.skipped).to.deep.equal(['images.screenshotInterval']);
+    });
+
     it('rejects a status that is not an object', () => {
         for (const raw of [null, undefined, 7, 'x', []]) {
             const { values, skipped } = mapStatus(raw, 'rest');

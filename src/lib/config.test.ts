@@ -86,6 +86,32 @@ describe('config', () => {
         expect(errors).to.have.length(4);
     });
 
+    it('accepts a 64-character topic id and rejects 65 characters', () => {
+        const rows = [
+            { ...mqtt, id: 'a', topicId: 't'.repeat(64) },
+            { ...mqtt, id: 'b', topicId: 'u'.repeat(65) },
+        ];
+        const { config, errors } = run({ devices: rows });
+        expect(config.devices.map(d => d.id)).to.deep.equal(['a']);
+        expect(errors).to.have.length(1);
+        expect(errors[0]).to.contain('topic ID');
+    });
+
+    it('skips rows with an unknown or missing transport', () => {
+        const { config, errors } = run({
+            devices: [
+                { ...rest, id: 'a', transport: 'http' },
+                { ...rest, id: 'b', transport: undefined },
+                { ...rest, id: 'c' },
+            ],
+        });
+        expect(config.devices.map(d => d.id)).to.deep.equal(['c']);
+        expect(errors).to.have.length(2);
+        for (const message of errors) {
+            expect(message).to.contain('transport must be REST or MQTT');
+        }
+    });
+
     it('skips MQTT tablets without broker credentials but keeps REST tablets', () => {
         const { config, errors } = run({ mqttUser: '', devices: [rest, mqtt] });
         expect(config.devices.map(d => d.id)).to.deep.equal(['hall']);
@@ -100,6 +126,8 @@ describe('config', () => {
             { mqttBaseTopic: '' },
             { mqttBaseTopic: '/fk' },
             { mqttBaseTopic: 'f+k' },
+            { mqttBaseTopic: 'fk/' },
+            { mqttBaseTopic: 'f#k' },
         ]) {
             const { config, errors } = run({ ...bad, devices: [mqtt] });
             expect(config.devices, JSON.stringify(bad)).to.have.length(0);
@@ -135,6 +163,8 @@ describe('config', () => {
     it('treats a missing or broken device list as empty', () => {
         expect(run({ devices: undefined }).config.devices).to.deep.equal([]);
         expect(run({ devices: 'x' }).config.devices).to.deep.equal([]);
-        expect(run({ devices: [null, 7, 'x'] }).config.devices).to.deep.equal([]);
+        const broken = run({ devices: [null, 7, 'x', [rest], rest] });
+        expect(broken.config.devices.map(d => d.id)).to.deep.equal(['hall']);
+        expect(broken.errors).to.deep.equal([]);
     });
 });

@@ -121,6 +121,9 @@ describe('commands', () => {
             loop: false,
             volume: 50,
         });
+        expect(ok('commands.audioPlay', 'https://x/a.mp3').mqtt?.payload).to.equal(
+            '{"url":"https://x/a.mp3","loop":false,"volume":50}',
+        );
         const json = ok('commands.audioPlay', '{"url":"http://x/a.mp3","loop":true,"volume":20}');
         expect(json.mqtt?.payload).to.equal('{"url":"http://x/a.mp3","loop":true,"volume":20}');
         for (const value of [

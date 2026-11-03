@@ -30,7 +30,15 @@ describe('objects', () => {
 
     it('creates MQTT-only states only for MQTT tablets', () => {
         const restIds = statesFor('rest').map(s => s.id);
-        expect(mqttOnlyIds()).to.include.members(['sensors.motion', 'images.screenshotInterval']);
+        expect(mqttOnlyIds()).to.have.members([
+            'sensors.motion',
+            'sensors.motionAlwaysOn',
+            'images.screenshotAuto',
+            'images.cameraAuto',
+            'images.screenshotInterval',
+            'images.cameraInterval',
+        ]);
+        expect(mqttOnlyIds()).to.have.length(6);
         for (const id of mqttOnlyIds()) {
             expect(restIds).not.to.include(id);
         }
