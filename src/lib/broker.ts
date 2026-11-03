@@ -1,12 +1,16 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { createServer, type AddressInfo, type Server } from 'node:net';
+import type { EventEmitter } from 'node:events';
+import { createServer, type AddressInfo, type Server, type Socket } from 'node:net';
 import { Aedes, type AedesPublishPacket, type Client } from 'aedes';
 import type { ImageKind } from './commands';
 
 export const STATE_MAX_BYTES = 64 * 1024;
 export const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 
-/** Distinct unknown topic ids reported before further ones are ignored silently. */
+/** Bytes a connection may send before its login succeeded. */
+export const PRELOGIN_MAX_BYTES = 64 * 1024;
+
+/** Distinct unknown topic ids, or refused addresses, reported before further ones are ignored silently. */
 const UNKNOWN_MAX = 100;
 
 const IMAGE_SUFFIXES = new Map<string, ImageKind>([
@@ -41,6 +45,8 @@ export interface BrokerEvents {
     unknownTablet(topicId: string): void;
     /** Once per tablet and reason */
     dropped(topicId: string, reason: string): void;
+    /** Once per remote address whose MQTT login was refused */
+    loginRefused(address: string): void;
     /** Server level failure */
     error(err: Error): void;
 }
@@ -83,6 +89,19 @@ function printable(text: string): string {
 }
 
 /**
+ * 'readable' listener on every new connection until its login succeeded. aedes reads the socket
+ * in paused mode ('readable' + read()), so a second 'readable' listener neither switches the
+ * stream to flowing mode nor consumes bytes; it only looks at the received byte count.
+ *
+ * @param this the connection
+ */
+function preLoginGuard(this: Socket): void {
+    if (this.bytesRead > PRELOGIN_MAX_BYTES) {
+        this.destroy();
+    }
+}
+
+/**
  * MQTT broker for FreeKiosk tablets. Requires a login, binds every client to the topic id it
  * first uses, keeps no retained messages, and hands status, availability and images to `events`.
  */
@@ -93,6 +112,7 @@ export class Broker {
     private readonly lastOnline = new Map<string, boolean>();
     private readonly reported = new Set<string>();
     private readonly unknownSeen = new Set<string>();
+    private readonly refusedSeen = new Set<string>();
     private readonly known: Set<string>;
     private readonly userHash: Buffer;
     private readonly passwordHash: Buffer;
@@ -107,10 +127,21 @@ export class Broker {
         this.userHash = digest(opts.user);
         this.passwordHash = digest(opts.password);
 
-        aedes.authenticate = (_client, username, password, done) => {
+        aedes.authenticate = (client, username, password, done) => {
             const userOk = timingSafeEqual(digest(username ?? ''), this.userHash);
             const passwordOk = timingSafeEqual(digest(password ? password.toString() : ''), this.passwordHash);
-            done(null, username !== undefined && password !== undefined && userOk && passwordOk);
+            const ok = username !== undefined && password !== undefined && userOk && passwordOk;
+            const conn = client.conn as Socket;
+            if (ok) {
+                conn.off('readable', preLoginGuard);
+            } else {
+                const address = conn.remoteAddress ?? 'unknown address';
+                if (!this.refusedSeen.has(address) && this.refusedSeen.size < UNKNOWN_MAX) {
+                    this.refusedSeen.add(address);
+                    this.events.loginRefused(address);
+                }
+            }
+            done(null, ok);
         };
         aedes.authorizePublish = (client, packet, done) => {
             if (!client) {
@@ -147,9 +178,11 @@ export class Broker {
         };
         aedes.on('publish', (packet: AedesPublishPacket, client: Client | null) => {
             if (client) {
-                this.onPublish(packet);
+                this.onPublish(packet, client);
             }
         });
+        // aedes is an EventEmitter whose typings omit 'error'; without a listener it would crash the adapter.
+        (aedes as EventEmitter).on('error', (err: Error) => events.error(err));
         aedes.on('clientDisconnect', (client: Client) => {
             const topicId = this.boundTo.get(client);
             if (topicId !== undefined && this.owner.get(topicId) === client) {
@@ -168,7 +201,11 @@ export class Broker {
      */
     static async start(opts: BrokerOptions, events: BrokerEvents): Promise<Broker> {
         const aedes = await Aedes.createBroker();
-        const server = createServer(aedes.handle);
+        const server = createServer(socket => {
+            // Registered before aedes' own listener, so the guard sees each chunk first.
+            socket.on('readable', preLoginGuard);
+            aedes.handle(socket);
+        });
         server.maxConnections = opts.topicIds.length + 5;
         const broker = new Broker(aedes, server, opts, events);
         try {
@@ -249,10 +286,12 @@ export class Broker {
     }
 
     // Known limit: mqtt-packet buffers a whole packet before aedes sees it, so the size limits
-    // below apply after parsing. Only authenticated clients get past CONNECT.
-    private onPublish(packet: AedesPublishPacket): void {
+    // below apply after parsing. Before login a connection is closed after PRELOGIN_MAX_BYTES,
+    // so an oversized packet is only possible for a client that logged in.
+    private onPublish(packet: AedesPublishPacket, client: Client): void {
         const parsed = parseTopic(this.opts.baseTopic, packet.topic);
-        if (!parsed || !this.known.has(parsed.topicId)) {
+        // A late will of a replaced session no longer owns the topic id and is ignored.
+        if (!parsed || !this.known.has(parsed.topicId) || this.owner.get(parsed.topicId) !== client) {
             return;
         }
         const { topicId, suffix } = parsed;

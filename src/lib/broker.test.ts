@@ -1,4 +1,6 @@
 import { expect } from 'chai';
+import type { EventEmitter } from 'node:events';
+import { connect } from 'node:net';
 import { connectAsync, type IClientOptions, type MqttClient } from 'mqtt';
 import { Broker, parseTopic, STATE_MAX_BYTES, type BrokerEvents } from './broker';
 
@@ -12,6 +14,7 @@ function recorder(): { calls: Call[]; events: BrokerEvents } {
         image: (...a) => calls.push(['image', ...a]),
         unknownTablet: (...a) => calls.push(['unknownTablet', ...a]),
         dropped: (...a) => calls.push(['dropped', ...a]),
+        loginRefused: (...a) => calls.push(['loginRefused', ...a]),
         error: (...a) => calls.push(['error', ...a]),
     };
     return { calls, events };
@@ -25,6 +28,14 @@ async function until(check: () => boolean, ms = 3000): Promise<void> {
         }
         await new Promise(resolve => setTimeout(resolve, 20));
     }
+}
+
+function aedesOf(broker: Broker): EventEmitter {
+    return (broker as unknown as { aedes: EventEmitter }).aedes;
+}
+
+function willPacket(topic: string, payload: string): Record<string, unknown> {
+    return { cmd: 'publish', topic, payload: Buffer.from(payload), qos: 1, retain: false, dup: false };
 }
 
 describe('parseTopic', () => {
@@ -87,6 +98,11 @@ describe('Broker', () => {
             }
             expect(refused, JSON.stringify(options)).to.equal(true);
         }
+        // Reported once per address, without user or password.
+        expect(rec.calls.filter(c => c[0] === 'loginRefused')).to.have.length(1);
+        expect(String(rec.calls.find(c => c[0] === 'loginRefused')?.[1])).to.match(/127\.0\.0\.1$/);
+        expect(JSON.stringify(rec.calls)).not.to.contain('wrong');
+        expect(JSON.stringify(rec.calls)).not.to.contain('iob');
     });
 
     it('reports availability and parsed state, and offline on disconnect', async () => {
@@ -157,6 +173,16 @@ describe('Broker', () => {
         const again = await tablet({ clientId: 'freekiosk_a' });
         await again.publishAsync('freekiosk/kitchen/availability', 'online');
         await until(() => broker.isOnline('kitchen') && again.connected);
+        // A will of the replaced session that arrives this late must not overwrite availability.
+        // Over the wire aedes publishes it before the new session can announce itself, so the
+        // late delivery is injected on the broker's aedes instance.
+        aedesOf(broker).emit('publish', willPacket('freekiosk/kitchen/availability', 'offline'), { id: 'freekiosk_a' });
+        expect(broker.isOnline('kitchen')).to.equal(true);
+    });
+
+    it('reports aedes errors instead of crashing', () => {
+        aedesOf(broker).emit('error', new Error('boom'));
+        expect(rec.calls.filter(c => c[0] === 'error').map(c => String(c[1]))).to.deep.equal(['Error: boom']);
     });
 
     it('delivers commands only to the own set topic', async () => {
@@ -211,6 +237,36 @@ describe('Broker', () => {
         expect(broker.isOnline('kitchen')).to.equal(false);
         await again.publishAsync('freekiosk/kitchen/availability', 'online');
         await until(() => broker.isOnline('kitchen'));
+    });
+
+    it('closes a connection that sends more than the pre-login budget', async () => {
+        const socket = connect(broker.port, '127.0.0.1');
+        socket.on('error', () => undefined); // the broker may reset while we still write
+        let closed = false;
+        socket.on('close', () => (closed = true));
+        await new Promise<void>(resolve => socket.once('connect', resolve));
+        // CONNECT fixed header declaring 100,000,000 bytes remaining length, then 128 KB of it.
+        socket.write(Buffer.from([0x10, 0x80, 0xc2, 0xd7, 0x2f]));
+        socket.write(Buffer.alloc(128 * 1024));
+        try {
+            await until(() => closed, 1500);
+        } finally {
+            socket.destroy();
+        }
+        await tablet();
+    });
+
+    it('rejects start on a port already in use', async () => {
+        let code = '';
+        try {
+            await Broker.start(
+                { port: broker.port, baseTopic: 'freekiosk', user: 'iob', password: 'secret', topicIds: ['kitchen'] },
+                recorder().events,
+            );
+        } catch (err) {
+            code = (err as NodeJS.ErrnoException).code ?? '';
+        }
+        expect(code).to.equal('EADDRINUSE');
     });
 
     it('refuses to publish to an offline tablet', async () => {

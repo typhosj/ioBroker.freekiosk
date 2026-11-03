@@ -55,12 +55,15 @@ class Freekiosk extends utils.Adapter {
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
         super({ ...options, name: 'freekiosk' });
         this.on('ready', () => {
-            this.onReady().catch(async err => {
-                this.log.error(
-                    `Start failed: ${errorText(err)}; the adapter stays idle until the instance is restarted`,
-                );
-                await this.stopAll();
-            });
+            this.onReady()
+                .catch(async err => {
+                    this.log.error(
+                        `Start failed: ${errorText(err)}; the adapter stays idle until the instance is restarted`,
+                    );
+                    await this.stopAll();
+                    await this.markOffline();
+                })
+                .catch(err => this.log.error(`Cleanup after the failed start: ${errorText(err)}`));
         });
         this.on('unload', callback => {
             void this.onUnload(callback);
@@ -167,17 +170,9 @@ class Freekiosk extends utils.Adapter {
 
     private async pollOnce(tablet: Tablet, intervalSec: number): Promise<void> {
         const { name, host } = tablet.config;
+        let status: unknown;
         try {
-            const status = await fetchStatus(this.target(tablet), this.abort.signal);
-            if (this.stopping) {
-                return;
-            }
-            if (!tablet.online) {
-                this.log.info(`${name} (${host}) is reachable`);
-            }
-            tablet.failLogged = false;
-            await this.setOnline(tablet, true);
-            await this.applyStatus(tablet, status);
+            status = await fetchStatus(this.target(tablet), this.abort.signal);
         } catch (err) {
             if (this.stopping) {
                 return;
@@ -192,6 +187,23 @@ class Freekiosk extends utils.Adapter {
                 this.log.debug(`${name} (${host}) still not reachable: ${errorText(err)}`);
             }
             await this.setOnline(tablet, false);
+            return;
+        }
+        if (this.stopping) {
+            return;
+        }
+        if (!tablet.online) {
+            this.log.info(`${name} (${host}) is reachable`);
+        }
+        tablet.failLogged = false;
+        // A failed state write says nothing about the tablet: it stays online and is not "not reachable".
+        try {
+            await this.setOnline(tablet, true);
+            await this.applyStatus(tablet, status);
+        } catch (err) {
+            if (!this.stopping) {
+                this.log.warn(`${name}: status not stored: ${errorText(err)}`);
+            }
         }
     }
 
@@ -233,6 +245,8 @@ class Freekiosk extends utils.Adapter {
                     unknownTablet: topicId =>
                         this.log.info(`Tablet "${topicId}" connected but is not in the device table`),
                     dropped: (topicId, reason) => this.log.warn(`${topicId}: message dropped, ${reason}`),
+                    loginRefused: address =>
+                        this.log.warn(`MQTT login refused from ${address}; check user and password in FreeKiosk`),
                     error: err => this.log.error(`MQTT broker: ${errorText(err)}`),
                 },
             );
@@ -350,13 +364,18 @@ class Freekiosk extends utils.Adapter {
         await broker?.close();
     }
 
+    /** Writes every tablet and the instance connection offline. */
+    private async markOffline(): Promise<void> {
+        for (const tablet of this.tablets.values()) {
+            await this.setStateAsync(`${tablet.config.id}.info.online`, false, true);
+        }
+        await this.setStateAsync('info.connection', false, true);
+    }
+
     private async onUnload(callback: () => void): Promise<void> {
         try {
             await this.stopAll();
-            for (const tablet of this.tablets.values()) {
-                await this.setStateAsync(`${tablet.config.id}.info.online`, false, true);
-            }
-            await this.setStateAsync('info.connection', false, true);
+            await this.markOffline();
         } catch (err) {
             this.log.error(`Unload: ${errorText(err)}`);
         } finally {
