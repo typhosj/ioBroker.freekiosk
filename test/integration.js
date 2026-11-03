@@ -1,5 +1,117 @@
-const path = require('path');
+const fs = require('node:fs');
+const http = require('node:http');
+const os = require('node:os');
+const path = require('node:path');
+const { expect } = require('chai');
+const mqtt = require('mqtt');
 const { tests } = require('@iobroker/testing');
+const restStatus = require('./fixtures/rest-status.json');
+const mqttState = require('./fixtures/mqtt-state.json');
 
-// Run integration tests - See https://github.com/ioBroker/testing for a detailed explanation and further options
-tests.integration(path.join(__dirname, '..'));
+const DUMP = path.join(os.tmpdir(), 'freekiosk.0.json');
+const MQTT_PORT = 18861;
+
+function call(fn, ...args) {
+    return new Promise((resolve, reject) => fn(...args, (err, result) => (err ? reject(err) : resolve(result))));
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitFor(read, expected, timeoutMs) {
+    const end = Date.now() + timeoutMs;
+    let last;
+    while (Date.now() < end) {
+        last = await read();
+        if (last === expected) {
+            return;
+        }
+        await sleep(300);
+    }
+    expect(last).to.equal(expected);
+}
+
+tests.integration(path.join(__dirname, '..'), {
+    defineAdditionalTests({ suite }) {
+        suite('talks to a REST and an MQTT tablet', getHarness => {
+            let server;
+            const requests = [];
+
+            before(async () => {
+                server = http.createServer((req, res) => {
+                    let body = '';
+                    req.on('data', chunk => (body += chunk));
+                    req.on('end', () => {
+                        requests.push(`${req.method} ${req.url} ${body}`);
+                        res.writeHead(200, { 'Content-Type': 'application/json' });
+                        res.end(JSON.stringify(req.url === '/api/status' ? restStatus : { success: true, data: {} }));
+                    });
+                });
+                await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+            });
+            after(() => server.close());
+
+            it('creates objects, maps status, sends commands and writes a dump', async function () {
+                this.timeout(60_000);
+                const harness = getHarness();
+                await harness.changeAdapterConfig('freekiosk', {
+                    native: {
+                        mqttPort: MQTT_PORT,
+                        mqttBaseTopic: 'freekiosk',
+                        mqttUser: 'iob',
+                        mqttPassword: 'secret',
+                        restInterval: 5,
+                        restApiKey: 'k3y',
+                        devices: [
+                            { enabled: true, name: 'Hall', id: 'hall', transport: 'rest', host: '127.0.0.1', port: server.address().port, topicId: '' },
+                            { enabled: true, name: 'Kitchen', id: 'kitchen', transport: 'mqtt', host: '', port: 8080, topicId: 'kitchen' },
+                        ],
+                    },
+                });
+                // The harness encrypts the encryptedNative keys itself (legacy XOR with the system secret); never store them encrypted twice or plain.
+                const stored = await call(harness.objects.getObject.bind(harness.objects), 'system.adapter.freekiosk.0');
+                expect(stored.native.mqttPassword).not.to.equal('secret');
+                expect(stored.native.restApiKey).not.to.equal('k3y');
+                await harness.startAdapterAndWait();
+                const get = async id => (await call(harness.states.getState.bind(harness.states), id))?.val;
+                const set = (id, val) => call(harness.states.setState.bind(harness.states), id, { val, ack: false });
+
+                await waitFor(() => get('freekiosk.0.hall.battery.level'), 85, 15_000);
+                expect(await get('freekiosk.0.hall.info.online')).to.equal(true);
+
+                const tablet = await mqtt.connectAsync(`mqtt://127.0.0.1:${MQTT_PORT}`, { username: 'iob', password: 'secret', reconnectPeriod: 0 });
+                try {
+                    await tablet.subscribeAsync('freekiosk/kitchen/set/#');
+                    await tablet.publishAsync('freekiosk/kitchen/availability', 'online', { qos: 1, retain: true });
+                    await tablet.publishAsync('freekiosk/kitchen/state', JSON.stringify(mqttState), { retain: true });
+                    await waitFor(() => get('freekiosk.0.kitchen.sensors.motion'), true, 10_000);
+                    await waitFor(() => get('freekiosk.0.info.connection'), true, 10_000);
+
+                    await set('freekiosk.0.hall.screen.brightness', 40);
+                    await waitFor(async () => requests.includes('POST /api/brightness {"value":40}'), true, 10_000);
+                    const received = new Promise(resolve => tablet.once('message', (topic, payload) => resolve(`${topic} ${payload}`)));
+                    await set('freekiosk.0.kitchen.screen.on', false);
+                    expect(await received).to.equal('freekiosk/kitchen/set/screen OFF');
+                    await waitFor(async () => (await call(harness.states.getState.bind(harness.states), 'freekiosk.0.kitchen.screen.on'))?.ack, true, 5_000);
+                } finally {
+                    tablet.end(true);
+                }
+                await waitFor(() => get('freekiosk.0.kitchen.info.online'), false, 10_000);
+                expect(await get('freekiosk.0.info.connection')).to.equal(false);
+
+                const list = await call(harness.objects.getObjectList.bind(harness.objects), {
+                    startkey: 'freekiosk.0.',
+                    endkey: 'freekiosk.0.香',
+                });
+                const dump = {};
+                for (const row of list.rows) {
+                    dump[row.id] = row.value;
+                }
+                fs.writeFileSync(DUMP, JSON.stringify(dump, null, 2));
+                expect(dump).to.have.property('freekiosk.0.kitchen.sensors.motion');
+                expect(dump).not.to.have.property('freekiosk.0.hall.sensors.motion');
+            });
+        });
+    },
+});
