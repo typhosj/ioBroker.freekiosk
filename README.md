@@ -25,16 +25,26 @@ Each tablet talks to the adapter over either REST (the adapter polls the tablet)
 
 1. In FreeKiosk open Settings > Advanced > REST API, enable it, and note the port (default 8080). Optionally set an API key.
 1. Turn on "Allow remote control" in FreeKiosk, otherwise the tablet refuses all commands.
-1. In the adapter settings add a row to the device table: transport `REST`, the tablet's host and port. If you set an API key, enter it on the REST tab.
+1. In the adapter settings add a row to the device table (see below): transport `REST`, the tablet's host and port. If you set an API key, enter it on the REST tab.
+1. The REST tab also holds the poll interval in seconds (default 30, allowed 5 to 3600; values outside that range are clamped). A new poll starts only after the previous one has finished.
 
 ## Setup over MQTT
 
-1. In the adapter settings open the MQTT tab and set the port (default 1886), a user and a password.
-1. In FreeKiosk open Settings > Advanced > MQTT and enter the ioBroker host as broker, the port, the same user and password, and a device name.
+1. In the adapter settings open the MQTT tab and set the port (default 1886), a user and a password. The base topic (default `freekiosk`) must be the same as the base topic in FreeKiosk's MQTT settings.
+1. In FreeKiosk open Settings > Advanced > MQTT and enter the ioBroker host as broker, the port, the same user and password, the same base topic, and a device name.
 1. Turn on "Allow remote control" in FreeKiosk.
-1. Add a row to the device table: transport `MQTT` and the topic ID, which is the device name in lowercase with spaces replaced by `_`.
+1. Add a row to the device table (see below): transport `MQTT` and the topic ID, which is the device name in lowercase with spaces replaced by `_`.
 
-Motion detection and periodic screenshots with their intervals exist only over MQTT.
+Only over MQTT: motion detection, always-on motion detection, periodic screenshots and camera photos, and their intervals. Screenshots and camera photos work over both transports: over REST the adapter downloads them directly when you press the button (screenshot as PNG, camera photo as JPEG); over MQTT the tablet publishes them (JPEG) to the broker.
+
+## Device table
+
+One row per tablet, up to 50 rows. A row that fails validation is logged and skipped; the other tablets keep running.
+
+* **Object ID**: letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
+* **Transport**: `REST` or `MQTT`.
+* **Host and port** (REST only): the port defaults to 8080. MQTT rows need neither.
+* **Topic ID** (MQTT only): may stay empty when FreeKiosk's device name, in lowercase with spaces as `_`, equals the object ID in lowercase.
 
 ## Security
 
@@ -48,7 +58,7 @@ Each tablet is a device object named after its ID in the device table.
 |---|---|
 | `info` | online flag, last update, transport, FreeKiosk version, model, manufacturer, Android version, IP, device owner and kiosk mode |
 | `battery` | level, charging, temperature |
-| `screen` | screen on/off, brightness, screensaver (active and switch), auto-brightness (read only) |
+| `screen` | screen on/off, brightness, screensaver (active, and a switch that shows the last acknowledged command because FreeKiosk does not report the setting), auto-brightness (read only) |
 | `webview` | current URL (writable to navigate), loading, can go back, URL rotation |
 | `wifi` | SSID, signal strength (dBm and %) |
 | `sensors` | light, proximity; over MQTT also motion and motion always on |
@@ -62,6 +72,7 @@ Each tablet is a device object named after its ID in the device table.
 * `commands.audioPlay` takes a URL or JSON such as `{"url":"http://...","loop":false,"volume":50}`.
 * `commands.mode` takes `{"mode":"webview","url":"http://..."}`, `{"mode":"external_app","package":"com.example.app"}` or `{"mode":"media_player"}`.
 * Images are stored in the instance file storage. To show one in vis, use the path from `images.*`; the web adapter serves it as `/freekiosk.0/<id>/<file>`.
+* If nothing happens when you send a command, check "Allow remote control" in FreeKiosk first. With it off, REST refuses commands (the adapter logs a warning), while MQTT commands are dropped silently by FreeKiosk.
 * A command is acknowledged only after the tablet accepted it. If the tablet is offline, the command is dropped with a warning and not queued.
 
 ## Known limits
