@@ -94,7 +94,13 @@ describe('rest client', () => {
     });
 
     it('refuses redirects so the API key stays on the tablet', async () => {
-        handler = (_req, _body, res) => res.writeHead(302, { Location: 'http://127.0.0.1:1/' }).end();
+        handler = (req, _body, res) => {
+            if (req.url === '/api/status') {
+                res.writeHead(302, { Location: '/api/status-real' }).end();
+            } else {
+                json(res, 200, { success: true, data: { ok: true } });
+            }
+        };
         expect(await rejection(fetchStatus(target, never))).to.be.instanceOf(Error);
     });
 
