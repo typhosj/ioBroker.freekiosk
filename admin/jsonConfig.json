@@ -8,7 +8,11 @@
             "items": {
                 "devices": {
                     "type": "table",
+                    "xs": 12,
                     "sm": 12,
+                    "md": 12,
+                    "lg": 12,
+                    "xl": 12,
                     "noDelete": false,
                     "label": "Tablets",
                     "help": "devicesHelp",
@@ -38,19 +42,19 @@
             "type": "panel",
             "label": "REST",
             "items": {
-                "restInterval": { "type": "number", "label": "Poll interval (s)", "min": 5, "max": 3600, "default": 30, "sm": 12, "md": 4 },
-                "restApiKey": { "type": "password", "label": "API key", "help": "restApiKeyHelp", "sm": 12, "md": 8 }
+                "restInterval": { "type": "number", "label": "Poll interval (s)", "min": 5, "max": 3600, "default": 30, "xs": 12, "sm": 12, "md": 4, "lg": 4, "xl": 4 },
+                "restApiKey": { "type": "password", "label": "API key", "help": "restApiKeyHelp", "xs": 12, "sm": 12, "md": 8, "lg": 8, "xl": 8 }
             }
         },
         "tabMqtt": {
             "type": "panel",
             "label": "MQTT",
             "items": {
-                "mqttPort": { "type": "number", "label": "Broker port", "min": 1, "max": 65535, "default": 1886, "sm": 12, "md": 4 },
-                "mqttBaseTopic": { "type": "text", "label": "Base topic", "default": "freekiosk", "sm": 12, "md": 8 },
-                "mqttUser": { "type": "text", "label": "User", "sm": 12, "md": 4 },
-                "mqttPassword": { "type": "password", "label": "Password", "sm": 12, "md": 8 },
-                "mqttHint": { "type": "staticText", "text": "mqttHint", "sm": 12 }
+                "mqttPort": { "type": "number", "label": "Broker port", "min": 1, "max": 65535, "default": 1886, "xs": 12, "sm": 12, "md": 4, "lg": 4, "xl": 4 },
+                "mqttBaseTopic": { "type": "text", "label": "Base topic", "default": "freekiosk", "xs": 12, "sm": 12, "md": 8, "lg": 8, "xl": 8 },
+                "mqttUser": { "type": "text", "label": "User", "xs": 12, "sm": 12, "md": 4, "lg": 4, "xl": 4 },
+                "mqttPassword": { "type": "password", "label": "Password", "xs": 12, "sm": 12, "md": 8, "lg": 8, "xl": 8 },
+                "mqttHint": { "type": "staticText", "text": "mqttHint", "xs": 12, "sm": 12, "md": 12, "lg": 12, "xl": 12 }
             }
         }
     }

@@ -10,6 +10,7 @@
   "homepage": "https://github.com/typhosj/ioBroker.freekiosk",
   "license": "MIT",
   "keywords": [
+    "ioBroker",
     "freekiosk",
     "kiosk",
     "tablet",
@@ -52,7 +53,8 @@
     "build/",
     "www/",
     "io-package.json",
-    "LICENSE"
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "scripts": {
     "prebuild": "rimraf build",
