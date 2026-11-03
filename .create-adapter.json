@@ -70,6 +70,5 @@
     "defaultBranch": "main",
     "license": "MIT License",
     "dependabot": "yes",
-    "replay": "C:\\Users\\manuel\\Documents\\repo\\iobroker-adapters\\freekiosk\\.create-adapter.json",
     "creatorVersion": "3.1.5"
 }
