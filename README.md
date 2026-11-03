@@ -33,7 +33,7 @@ Each tablet talks to the adapter over either REST (the adapter polls the tablet)
 1. In the adapter settings open the MQTT tab and set the port (default 1886), a user and a password. The base topic (default `freekiosk`) must be the same as the base topic in FreeKiosk's MQTT settings.
 1. In FreeKiosk open Settings > Advanced > MQTT and enter the ioBroker host as broker, the port, the same user and password, the same base topic, and a device name.
 1. Turn on "Allow remote control" in FreeKiosk.
-1. Add a row to the device table (see below): transport `MQTT` and the topic ID, which is the device name in lowercase with spaces replaced by `_`.
+1. Add a row to the device table (see below) with transport `MQTT`. The topic ID is FreeKiosk's device name in lowercase with spaces replaced by `_`; it is optional and may stay empty when it equals the object ID in lowercase.
 
 Only over MQTT: motion detection, always-on motion detection, periodic screenshots and camera photos, and their intervals. Screenshots and camera photos work over both transports: over REST the adapter downloads them directly when you press the button (screenshot as PNG, camera photo as JPEG); over MQTT the tablet publishes them (JPEG) to the broker.
 
@@ -41,7 +41,7 @@ Only over MQTT: motion detection, always-on motion detection, periodic screensho
 
 One row per tablet, up to 50 rows. A row that fails validation is logged and skipped; the other tablets keep running.
 
-* **Object ID**: letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
+* **Object ID**: ASCII letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
 * **Transport**: `REST` or `MQTT`.
 * **Host and port** (REST only): the port defaults to 8080. MQTT rows need neither.
 * **Topic ID** (MQTT only): may stay empty when FreeKiosk's device name, in lowercase with spaces as `_`, equals the object ID in lowercase.
@@ -84,7 +84,31 @@ Each tablet is a device object named after its ID in the device table.
 
 ## Logo
 
-The adapter icon is the FreeKiosk logo, © RushB-fr, used under the MIT License.
+The adapter icon is the FreeKiosk logo from [RushB-fr/freekiosk](https://github.com/RushB-fr/freekiosk), used under the MIT License of that project:
+
+```text
+MIT License
+
+Copyright (c) 2025 Rushb
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Changelog
 <!--
