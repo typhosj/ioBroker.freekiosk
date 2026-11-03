@@ -95,6 +95,14 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
 -->
 
 ### **WORK IN PROGRESS**
+* (typhosj) MQTT: an empty image from the tablet no longer replaces the last stored image
+* (typhosj) MQTT: commands are refused with a warning while "Allow remote control" is off in FreeKiosk, instead of being acknowledged
+* (typhosj) The adapter now stops at once even while a connection to the broker is still being set up
+* (typhosj) Names, roles and units of the adapter's objects are restored on every start
+* (typhosj) The web view URL and the display mode URL must start with http:// or https://
+* (typhosj) The settings check object IDs, hosts and topic IDs before saving
+
+### 0.0.1 (2026-11-03)
 * (typhosj) Initial release: REST and MQTT tablets, status, commands, screenshots, camera photos, motion detection
 
 ## License
