@@ -93,6 +93,13 @@ describe('rest client', () => {
         expect(String(await rejection(fetchStatus(target, never)))).not.to.contain('secret-token');
     });
 
+    it('makes the error text of FreeKiosk printable and bounded', async () => {
+        handler = (_req, _body, res) =>
+            json(res, 500, { success: false, error: `bad\nline\u001b[31m\u0000${'x'.repeat(300)}` });
+        const message = (await rejection(fetchStatus(target, never))) as HttpError;
+        expect(message.message).to.equal(`HTTP 500: bad?line?[31m?${'x'.repeat(200 - 14)}`);
+    });
+
     it('refuses redirects so the API key stays on the tablet', async () => {
         handler = (req, _body, res) => {
             if (req.url === '/api/status') {

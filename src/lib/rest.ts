@@ -98,7 +98,8 @@ function errorText(body: Buffer): string {
     try {
         const parsed: unknown = JSON.parse(body.toString());
         if (isObject(parsed) && typeof parsed.error === 'string') {
-            return parsed.error.slice(0, 200);
+            // Control characters could forge log lines; the text is otherwise kept as FreeKiosk sent it.
+            return parsed.error.replace(/\p{Cc}/gu, '?').slice(0, 200);
         }
     } catch {
         // not JSON: fall through to the generic text
