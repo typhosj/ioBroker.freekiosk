@@ -1,0 +1,290 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { createServer, type AddressInfo, type Server } from 'node:net';
+import { Aedes, type AedesPublishPacket, type Client } from 'aedes';
+import type { ImageKind } from './commands';
+
+export const STATE_MAX_BYTES = 64 * 1024;
+export const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+
+const IMAGE_SUFFIXES = new Map<string, ImageKind>([
+    ['image/screenshot', 'screenshot'],
+    ['image/camera_front', 'cameraFront'],
+    ['image/camera_back', 'cameraBack'],
+]);
+
+/** Settings the broker runs with. */
+export interface BrokerOptions {
+    /** TCP port; 0 picks a free one */
+    port: number;
+    /** First topic level of every tablet topic */
+    baseTopic: string;
+    /** Login of all tablets */
+    user: string;
+    /** Password of all tablets */
+    password: string;
+    /** Topic ids of the configured tablets */
+    topicIds: string[];
+}
+
+/** Callbacks the broker reports to. */
+export interface BrokerEvents {
+    /** Parsed `state` message of a tablet */
+    status(topicId: string, raw: unknown): void;
+    /** Tablet went online or offline */
+    online(topicId: string, online: boolean): void;
+    /** Image payload of a tablet */
+    image(topicId: string, kind: ImageKind, data: Buffer): void;
+    /** Once per unknown topic id */
+    unknownTablet(topicId: string): void;
+    /** Once per tablet and reason */
+    dropped(topicId: string, reason: string): void;
+    /** Server level failure */
+    error(err: Error): void;
+}
+
+/**
+ * Splits `<base>/<topicId>/<suffix>`; undefined for any other topic.
+ *
+ * @param baseTopic first topic level(s)
+ * @param topic received topic
+ */
+export function parseTopic(baseTopic: string, topic: string): { topicId: string; suffix: string } | undefined {
+    const prefix = `${baseTopic}/`;
+    if (!topic.startsWith(prefix)) {
+        return undefined;
+    }
+    const rest = topic.slice(prefix.length);
+    const slash = rest.indexOf('/');
+    if (slash <= 0 || slash === rest.length - 1) {
+        return undefined;
+    }
+    return { topicId: rest.slice(0, slash), suffix: rest.slice(slash + 1) };
+}
+
+/**
+ * SHA-256 of a value, so comparisons run over equal lengths.
+ *
+ * @param value text or bytes to hash
+ */
+function digest(value: string | Buffer): Buffer {
+    return createHash('sha256').update(value).digest();
+}
+
+/**
+ * Printable, bounded form of an untrusted topic id for log lines.
+ *
+ * @param text untrusted text
+ */
+function printable(text: string): string {
+    return text.replace(/[^\x20-\x7e]/g, '?').slice(0, 64);
+}
+
+/**
+ * MQTT broker for FreeKiosk tablets. Requires a login, binds every client to the topic id it
+ * first uses, keeps no retained messages, and hands status, availability and images to `events`.
+ */
+export class Broker {
+    private readonly owner = new Map<string, Client>();
+    private readonly boundTo = new WeakMap<Client, string>();
+    private readonly availability = new Map<string, string>();
+    private readonly lastOnline = new Map<string, boolean>();
+    private readonly reported = new Set<string>();
+    private readonly known: Set<string>;
+    private readonly userHash: Buffer;
+    private readonly passwordHash: Buffer;
+
+    private constructor(
+        private readonly aedes: Aedes,
+        private readonly server: Server,
+        private readonly opts: BrokerOptions,
+        private readonly events: BrokerEvents,
+    ) {
+        this.known = new Set(opts.topicIds);
+        this.userHash = digest(opts.user);
+        this.passwordHash = digest(opts.password);
+
+        aedes.authenticate = (_client, username, password, done) => {
+            const userOk = timingSafeEqual(digest(username ?? ''), this.userHash);
+            const passwordOk = timingSafeEqual(digest(password ? password.toString() : ''), this.passwordHash);
+            done(null, username !== undefined && password !== undefined && userOk && passwordOk);
+        };
+        aedes.authorizePublish = (client, packet, done) => {
+            if (!client) {
+                done(null);
+                return;
+            }
+            // The adapter consumes every message directly; the broker keeps nothing in memory.
+            packet.retain = false;
+            const parsed = parseTopic(this.opts.baseTopic, packet.topic);
+            if (!parsed) {
+                done(null); // e.g. Home Assistant discovery: accepted and ignored
+                return;
+            }
+            if (!this.known.has(parsed.topicId)) {
+                const name = printable(parsed.topicId);
+                this.once(`unknown:${name}`, () => this.events.unknownTablet(name));
+                done(null);
+                return;
+            }
+            done(this.bind(client, parsed.topicId));
+        };
+        aedes.authorizeSubscribe = (client, subscription, done) => {
+            const parsed = parseTopic(this.opts.baseTopic, subscription.topic);
+            const allowed =
+                parsed !== undefined &&
+                parsed.suffix === 'set/#' &&
+                this.known.has(parsed.topicId) &&
+                this.bind(client, parsed.topicId) === null;
+            done(null, allowed ? subscription : null);
+        };
+        aedes.on('publish', (packet: AedesPublishPacket, client: Client | null) => {
+            if (client) {
+                this.onPublish(packet);
+            }
+        });
+        aedes.on('clientDisconnect', (client: Client) => {
+            const topicId = this.boundTo.get(client);
+            if (topicId !== undefined && this.owner.get(topicId) === client) {
+                this.owner.delete(topicId);
+                this.emitOnline(topicId);
+            }
+        });
+    }
+
+    /**
+     * Starts the broker; rejects when the port cannot be bound.
+     *
+     * @param opts broker settings
+     * @param events callbacks for tablet traffic
+     */
+    static async start(opts: BrokerOptions, events: BrokerEvents): Promise<Broker> {
+        const aedes = await Aedes.createBroker();
+        const server = createServer(aedes.handle);
+        server.maxConnections = opts.topicIds.length + 5;
+        const broker = new Broker(aedes, server, opts, events);
+        try {
+            await new Promise<void>((resolve, reject) => {
+                server.once('error', reject);
+                server.listen(opts.port, () => {
+                    server.off('error', reject);
+                    resolve();
+                });
+            });
+        } catch (err) {
+            await new Promise<void>(resolve => aedes.close(() => resolve()));
+            throw err;
+        }
+        server.on('error', err => events.error(err));
+        return broker;
+    }
+
+    /** Port the server listens on */
+    get port(): number {
+        return (this.server.address() as AddressInfo).port;
+    }
+
+    /**
+     * True while the tablet holds a connection and announced itself online.
+     *
+     * @param topicId tablet topic id
+     */
+    isOnline(topicId: string): boolean {
+        return this.owner.has(topicId) && this.availability.get(topicId) === 'online';
+    }
+
+    /**
+     * Publishes a command to `<base>/<topicId>/set/<entity>` with QoS 1, not retained.
+     *
+     * @param topicId tablet topic id
+     * @param entity command name
+     * @param payload command value
+     */
+    async publish(topicId: string, entity: string, payload: string): Promise<void> {
+        if (!this.isOnline(topicId)) {
+            throw new Error('tablet is not connected');
+        }
+        await new Promise<void>((resolve, reject) => {
+            this.aedes.publish(
+                {
+                    cmd: 'publish',
+                    topic: `${this.opts.baseTopic}/${topicId}/set/${entity}`,
+                    payload: Buffer.from(payload),
+                    qos: 1,
+                    retain: false,
+                    dup: false,
+                },
+                err => (err ? reject(err) : resolve()),
+            );
+        });
+    }
+
+    /** Stops the broker and drops all clients. */
+    async close(): Promise<void> {
+        await new Promise<void>(resolve => this.aedes.close(() => resolve()));
+        await new Promise<void>(resolve => this.server.close(() => resolve()));
+    }
+
+    private bind(client: Client, topicId: string): Error | null {
+        const bound = this.boundTo.get(client);
+        if (bound !== undefined) {
+            return bound === topicId ? null : new Error('client is bound to another topic id');
+        }
+        const current = this.owner.get(topicId);
+        // The same client id reconnecting replaces its old session; a different one is refused.
+        if (current && current !== client && current.id !== client.id) {
+            return new Error('topic id is in use by another client');
+        }
+        this.boundTo.set(client, topicId);
+        this.owner.set(topicId, client);
+        return null;
+    }
+
+    // Known limit: mqtt-packet buffers a whole packet before aedes sees it, so the size limits
+    // below apply after parsing. Only authenticated clients get past CONNECT.
+    private onPublish(packet: AedesPublishPacket): void {
+        const parsed = parseTopic(this.opts.baseTopic, packet.topic);
+        if (!parsed || !this.known.has(parsed.topicId)) {
+            return;
+        }
+        const { topicId, suffix } = parsed;
+        const payload = Buffer.isBuffer(packet.payload) ? packet.payload : Buffer.from(packet.payload);
+        const kind = IMAGE_SUFFIXES.get(suffix);
+        const limit = kind ? IMAGE_MAX_BYTES : STATE_MAX_BYTES;
+        if (payload.length > limit) {
+            this.once(`size:${topicId}:${suffix}`, () =>
+                this.events.dropped(topicId, `${suffix} of ${payload.length} bytes is over the limit of ${limit}`),
+            );
+            return;
+        }
+        if (suffix === 'availability') {
+            this.availability.set(topicId, payload.toString());
+            this.emitOnline(topicId);
+        } else if (suffix === 'state') {
+            let raw: unknown;
+            try {
+                raw = JSON.parse(payload.toString());
+            } catch {
+                this.once(`json:${topicId}`, () => this.events.dropped(topicId, 'state is not valid JSON'));
+                return;
+            }
+            this.events.status(topicId, raw);
+        } else if (kind) {
+            this.events.image(topicId, kind, payload);
+        }
+    }
+
+    private emitOnline(topicId: string): void {
+        const online = this.isOnline(topicId);
+        if (this.lastOnline.get(topicId) !== online) {
+            this.lastOnline.set(topicId, online);
+            this.events.online(topicId, online);
+        }
+    }
+
+    private once(key: string, report: () => void): void {
+        if (!this.reported.has(key)) {
+            this.reported.add(key);
+            report();
+        }
+    }
+}
