@@ -1,174 +1,324 @@
-/*
- * Created with @iobroker/create-adapter v3.1.5
- */
-
-// The adapter-core module gives you access to the core ioBroker functions
-// you need to create an adapter
 import * as utils from '@iobroker/adapter-core';
+import { Broker } from './lib/broker';
+import { buildCommand, type ImageKind } from './lib/commands';
+import { validateConfig, type DeviceConfig, type InstanceConfig } from './lib/config';
+import { CHANNELS, mqttOnlyIds, statesFor, type StateDef } from './lib/objects';
+import { fetchImage, fetchStatus, HttpError, Poller, sendRest, type RestTarget } from './lib/rest';
+import { mapStatus } from './lib/status';
 
-// Load your modules here, e.g.:
-// import * as fs from 'fs';
+interface Tablet {
+    config: DeviceConfig;
+    online: boolean;
+    failLogged: boolean;
+    poller?: Poller;
+}
+
+function errorText(err: unknown): string {
+    return err instanceof Error ? err.message : String(err);
+}
+
+function commonOf(def: StateDef): ioBroker.StateCommon {
+    const common: ioBroker.StateCommon = {
+        name: def.name,
+        type: def.type,
+        role: def.role,
+        read: def.read,
+        write: def.write,
+    };
+    if (def.unit !== undefined) {
+        common.unit = def.unit;
+    }
+    if (def.min !== undefined) {
+        common.min = def.min;
+    }
+    if (def.max !== undefined) {
+        common.max = def.max;
+    }
+    return common;
+}
 
 class Freekiosk extends utils.Adapter {
+    private settings?: InstanceConfig;
+    private readonly tablets = new Map<string, Tablet>();
+    private readonly byTopic = new Map<string, Tablet>();
+    private broker?: Broker;
+    private stopping = false;
+    private readonly abort = new AbortController();
+
     public constructor(options: Partial<utils.AdapterOptions> = {}) {
-        super({
-            ...options,
-            name: 'freekiosk',
+        super({ ...options, name: 'freekiosk' });
+        this.on('ready', () => {
+            this.onReady().catch(err => this.log.error(`Start failed: ${errorText(err)}`));
         });
-        this.on('ready', this.onReady.bind(this));
-        this.on('stateChange', this.onStateChange.bind(this));
-        // this.on('objectChange', this.onObjectChange.bind(this));
-        // this.on('message', this.onMessage.bind(this));
-        this.on('unload', this.onUnload.bind(this));
+        this.on('unload', callback => {
+            void this.onUnload(callback);
+        });
     }
 
-    /**
-     * Is called when databases are connected and adapter received configuration.
-     */
     private async onReady(): Promise<void> {
-        // Initialize your adapter here
-
-        // Reset the connection indicator during startup
-        this.setState('info.connection', false, true);
-
-        // The adapters config (in the instance object everything under the attribute "native") is accessible via
-        // this.config:
-        this.log.debug('config mqttPort: ${this.config.mqttPort}');
-        this.log.debug('config mqttBaseTopic: ${this.config.mqttBaseTopic}');
-        this.log.debug('config mqttUser: ${this.config.mqttUser}');
-        this.log.debug('config mqttPassword: ${this.config.mqttPassword}');
-        this.log.debug('config restInterval: ${this.config.restInterval}');
-        this.log.debug('config restApiKey: ${this.config.restApiKey}');
-
-        /*
-		For every state in the system there has to be also an object of type state
-		Here a simple template for a boolean variable named "testVariable"
-		Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
-
-		IMPORTANT: State roles should be chosen carefully based on the state's purpose.
-		           Please refer to the state roles documentation for guidance:
-		           https://www.iobroker.net/#en/documentation/dev/stateroles.md
-		*/
-        await this.setObjectNotExistsAsync('testVariable', {
-            type: 'state',
-            common: {
-                name: 'testVariable',
-                type: 'boolean',
-                role: 'indicator',
-                read: true,
-                write: true,
-            },
-            native: {},
-        });
-
-        // In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-        this.subscribeStates('testVariable');
-        // You can also add a subscription for multiple states. The following line watches all states starting with "lights."
-        // this.subscribeStates('lights.*');
-        // Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
-        // this.subscribeStates('*');
-
-        /*
-			setState examples
-			you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-		*/
-        // the variable testVariable is set to true as command (ack=false)
-        await this.setState('testVariable', true);
-
-        // same thing, but the value is flagged "ack"
-        // ack should be always set to true if the value is received from or acknowledged from the target system
-        await this.setState('testVariable', { val: true, ack: true });
-
-        // same thing, but the state is deleted after 30s (getState will return null afterwards)
-        await this.setState('testVariable', { val: true, ack: true, expire: 30 });
-
-        // examples for the checkPassword/checkGroup functions
-        const pwdResult = await this.checkPasswordAsync('admin', 'iobroker');
-        this.log.info(`check user admin pw iobroker: ${JSON.stringify(pwdResult)}`);
-
-        const groupResult = await this.checkGroupAsync('admin', 'admin');
-        this.log.info(`check group user admin group admin: ${JSON.stringify(groupResult)}`);
-    }
-
-    /**
-     * Is called when adapter shuts down - callback has to be called under any circumstances!
-     *
-     * @param callback - Callback function
-     */
-    private onUnload(callback: () => void): void {
-        try {
-            // Here you must clear all timeouts or intervals that may still be active
-            // clearTimeout(timeout1);
-            // clearTimeout(timeout2);
-            // ...
-            // clearInterval(interval1);
-
-            callback();
-        } catch (error) {
-            this.log.error(`Error during unloading: ${(error as Error).message}`);
-            callback();
+        await this.setState('info.connection', false, true);
+        const { config, errors } = validateConfig(this.config as unknown as Record<string, unknown>);
+        for (const message of errors) {
+            this.log.error(message);
         }
-    }
-
-    // If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
-    // You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
-    // /**
-    //  * Is called if a subscribed object changes
-    //  */
-    // private onObjectChange(id: string, obj: ioBroker.Object | null | undefined): void {
-    //     if (obj) {
-    //         // The object was changed
-    //         this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
-    //     } else {
-    //         // The object was deleted
-    //         this.log.info(`object ${id} deleted`);
-    //     }
-    // }
-
-    /**
-     * Is called if a subscribed state changes
-     *
-     * @param id - State ID
-     * @param state - State object
-     */
-    private onStateChange(id: string, state: ioBroker.State | null | undefined): void {
-        if (state) {
-            // The state was changed
-            this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
-
-            if (state.ack === false) {
-                // This is a command from the user (e.g., from the UI or other adapter)
-                // and should be processed by the adapter
-                this.log.info(`User command received for ${id}: ${state.val}`);
-
-                // TODO: Add your control logic here
+        this.settings = config;
+        if (!config.devices.length) {
+            this.log.warn('No valid tablet configured; add one in the instance settings.');
+            return;
+        }
+        for (const device of config.devices) {
+            const tablet: Tablet = { config: device, online: false, failLogged: false };
+            this.tablets.set(device.id, tablet);
+            if (device.transport === 'mqtt') {
+                this.byTopic.set(device.topicId, tablet);
             }
-        } else {
-            // The object was deleted or the state value has expired
-            this.log.info(`state ${id} deleted`);
+            await this.createObjects(device);
+        }
+        if (this.byTopic.size) {
+            await this.startBroker(config);
+        }
+        for (const tablet of this.tablets.values()) {
+            if (tablet.config.transport === 'rest') {
+                this.startPolling(tablet, config.restInterval);
+            }
+        }
+        this.on('stateChange', (id, state) => {
+            this.onStateChange(id, state).catch(err => this.log.error(`Command ${id} failed: ${errorText(err)}`));
+        });
+        for (const tablet of this.tablets.values()) {
+            for (const def of statesFor(tablet.config.transport).filter(s => s.write)) {
+                await this.subscribeStatesAsync(`${tablet.config.id}.${def.id}`);
+            }
         }
     }
-    // If you need to accept messages in your adapter, uncomment the following block and the corresponding line in the constructor.
-    // /**
-    //  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
-    //  * Using this method requires "common.messagebox" property to be set to true in io-package.json
-    //  */
-    //
-    // private onMessage(obj: ioBroker.Message): void {
-    //     if (typeof obj === 'object' && obj.message) {
-    //         if (obj.command === 'send') {
-    //             // e.g. send email or pushover or whatever
-    //             this.log.info('send command');
-    //             // Send response in callback if required
-    //             if (obj.callback) this.sendTo(obj.from, obj.command, 'Message received', obj.callback);
-    //         }
-    //     }
-    // }
+
+    private async createObjects(device: DeviceConfig): Promise<void> {
+        await this.extendObjectAsync(device.id, { type: 'device', common: { name: device.name }, native: {} });
+        const defs = statesFor(device.transport);
+        for (const channel of new Set(defs.map(def => def.id.split('.')[0]))) {
+            await this.setObjectNotExistsAsync(`${device.id}.${channel}`, {
+                type: 'channel',
+                common: { name: CHANNELS[channel] },
+                native: {},
+            });
+        }
+        for (const def of defs) {
+            await this.setObjectNotExistsAsync(`${device.id}.${def.id}`, {
+                type: 'state',
+                common: commonOf(def),
+                native: {},
+            });
+        }
+        if (device.transport === 'rest') {
+            for (const id of mqttOnlyIds()) {
+                const full = `${device.id}.${id}`;
+                if (await this.getObjectAsync(full)) {
+                    await this.delObjectAsync(full);
+                }
+            }
+        }
+        await this.setStateAsync(`${device.id}.info.transport`, device.transport, true);
+        await this.setStateAsync(`${device.id}.info.online`, false, true);
+    }
+
+    private target(tablet: Tablet): RestTarget {
+        return { host: tablet.config.host, port: tablet.config.port, apiKey: this.settings?.restApiKey ?? '' };
+    }
+
+    private startPolling(tablet: Tablet, intervalSec: number): void {
+        tablet.poller = new Poller(() => this.pollOnce(tablet, intervalSec), intervalSec * 1000, {
+            set: (fn, ms) => this.setTimeout(fn, ms),
+            clear: handle => this.clearTimeout(handle as ioBroker.Timeout),
+        });
+        tablet.poller.start();
+    }
+
+    private async pollOnce(tablet: Tablet, intervalSec: number): Promise<void> {
+        const { name, host } = tablet.config;
+        try {
+            const status = await fetchStatus(this.target(tablet), this.abort.signal);
+            if (this.stopping) {
+                return;
+            }
+            if (!tablet.online) {
+                this.log.info(`${name} (${host}) is reachable`);
+            }
+            tablet.failLogged = false;
+            await this.setOnline(tablet, true);
+            await this.applyStatus(tablet, status);
+        } catch (err) {
+            if (this.stopping) {
+                return;
+            }
+            if (err instanceof HttpError && err.status === 401) {
+                this.log.error(`${name} (${host}) rejected the API key; polling stops until the instance restarts`);
+                tablet.poller?.stop();
+            } else if (!tablet.failLogged) {
+                this.log.warn(`${name} (${host}) not reachable: ${errorText(err)}; retrying every ${intervalSec} s`);
+                tablet.failLogged = true;
+            } else {
+                this.log.debug(`${name} (${host}) still not reachable: ${errorText(err)}`);
+            }
+            await this.setOnline(tablet, false);
+        }
+    }
+
+    private async startBroker(config: InstanceConfig): Promise<void> {
+        const tabletOf = (topicId: string): Tablet | undefined => this.byTopic.get(topicId);
+        try {
+            this.broker = await Broker.start(
+                {
+                    port: config.mqttPort,
+                    baseTopic: config.mqttBaseTopic,
+                    user: config.mqttUser,
+                    password: config.mqttPassword,
+                    topicIds: [...this.byTopic.keys()],
+                },
+                {
+                    status: (topicId, raw) => {
+                        const tablet = tabletOf(topicId);
+                        if (tablet) {
+                            this.applyStatus(tablet, raw).catch(err =>
+                                this.log.warn(`${tablet.config.name}: status not stored: ${errorText(err)}`),
+                            );
+                        }
+                    },
+                    online: (topicId, online) => {
+                        const tablet = tabletOf(topicId);
+                        if (tablet) {
+                            this.log.info(`${tablet.config.name} ${online ? 'connected' : 'disconnected'} (MQTT)`);
+                            this.setOnline(tablet, online).catch(err =>
+                                this.log.warn(`${tablet.config.name}: ${errorText(err)}`),
+                            );
+                        }
+                    },
+                    image: (topicId, kind, data) => {
+                        const tablet = tabletOf(topicId);
+                        if (tablet) {
+                            this.storeImage(tablet, kind, data, 'jpg').catch(err =>
+                                this.log.warn(`${tablet.config.name}: image not stored: ${errorText(err)}`),
+                            );
+                        }
+                    },
+                    unknownTablet: topicId =>
+                        this.log.info(`Tablet "${topicId}" connected but is not in the device table`),
+                    dropped: (topicId, reason) => this.log.warn(`${topicId}: message dropped, ${reason}`),
+                    error: err => this.log.error(`MQTT broker: ${errorText(err)}`),
+                },
+            );
+            this.log.info(`MQTT broker listening on port ${config.mqttPort}`);
+        } catch (err) {
+            this.log.error(
+                `MQTT broker could not start on port ${config.mqttPort}: ${errorText(err)}. MQTT tablets stay offline; check the port in the instance settings.`,
+            );
+        }
+    }
+
+    private async applyStatus(tablet: Tablet, raw: unknown): Promise<void> {
+        const { values, skipped } = mapStatus(raw, tablet.config.transport);
+        if (skipped.length) {
+            this.log.debug(`${tablet.config.name}: skipped status fields ${skipped.join(', ')}`);
+        }
+        for (const [id, value] of values) {
+            await this.setStateChangedAsync(`${tablet.config.id}.${id}`, value, true);
+        }
+        await this.setStateAsync(`${tablet.config.id}.info.lastUpdate`, Date.now(), true);
+    }
+
+    private async setOnline(tablet: Tablet, online: boolean): Promise<void> {
+        if (tablet.online === online) {
+            return;
+        }
+        tablet.online = online;
+        await this.setStateAsync(`${tablet.config.id}.info.online`, online, true);
+        const all = [...this.tablets.values()].every(t => t.online);
+        await this.setStateChangedAsync('info.connection', all, true);
+    }
+
+    private async storeImage(tablet: Tablet, kind: ImageKind, data: Buffer, ext: 'png' | 'jpg'): Promise<void> {
+        const file = `${tablet.config.id}/${kind}.${ext}`;
+        await this.writeFileAsync(this.namespace, file, data);
+        await this.setStateAsync(`${tablet.config.id}.images.${kind}`, `/${this.namespace}/${file}`, true);
+        await this.setStateAsync(`${tablet.config.id}.images.${kind}Time`, Date.now(), true);
+    }
+
+    private async onStateChange(id: string, state: ioBroker.State | null | undefined): Promise<void> {
+        if (!state || state.ack || this.stopping) {
+            return;
+        }
+        const relative = id.slice(this.namespace.length + 1);
+        const dot = relative.indexOf('.');
+        const tablet = this.tablets.get(relative.slice(0, dot));
+        if (!tablet) {
+            return;
+        }
+        const stateId = relative.slice(dot + 1);
+        const { name, transport } = tablet.config;
+        const built = buildCommand(stateId, state.val);
+        if ('error' in built) {
+            this.log.warn(`${name} ${stateId}: ${built.error}; nothing sent`);
+            return;
+        }
+        if (!tablet.online) {
+            this.log.warn(`${name} is offline; ${stateId} not sent`);
+            return;
+        }
+        const command = built.command;
+        try {
+            if (transport === 'rest') {
+                if (command.rest) {
+                    await sendRest(this.target(tablet), command.rest, this.abort.signal);
+                } else if (command.image) {
+                    const image = await fetchImage(this.target(tablet), command.image, this.abort.signal);
+                    await this.storeImage(tablet, command.image, image.data, image.ext);
+                } else {
+                    this.log.warn(`${name}: ${stateId} is not available over REST`);
+                    return;
+                }
+                tablet.poller?.trigger();
+            } else {
+                if (!command.mqtt || !this.broker) {
+                    this.log.warn(`${name}: ${stateId} is not available over MQTT`);
+                    return;
+                }
+                await this.broker.publish(tablet.config.topicId, command.mqtt.entity, command.mqtt.payload);
+            }
+            await this.setStateAsync(id, command.ackValue, true);
+            this.log.debug(`${name}: ${stateId} sent`);
+        } catch (err) {
+            if (this.stopping) {
+                return;
+            }
+            if (err instanceof HttpError && err.status === 403) {
+                this.log.warn(`${name}: remote control is disabled in FreeKiosk; ${stateId} not executed`);
+            } else {
+                this.log.warn(`${name}: ${stateId} failed: ${errorText(err)}`);
+            }
+        }
+    }
+
+    private async onUnload(callback: () => void): Promise<void> {
+        this.stopping = true;
+        try {
+            this.abort.abort();
+            for (const tablet of this.tablets.values()) {
+                tablet.poller?.stop();
+            }
+            await this.broker?.close();
+            for (const tablet of this.tablets.values()) {
+                await this.setStateAsync(`${tablet.config.id}.info.online`, false, true);
+            }
+            await this.setStateAsync('info.connection', false, true);
+        } catch (err) {
+            this.log.error(`Unload: ${errorText(err)}`);
+        } finally {
+            callback();
+        }
+    }
 }
+
 if (require.main !== module) {
-    // Export the constructor in compact mode
     module.exports = (options: Partial<utils.AdapterOptions> | undefined) => new Freekiosk(options);
 } else {
-    // otherwise start the instance directly
     (() => new Freekiosk())();
 }
