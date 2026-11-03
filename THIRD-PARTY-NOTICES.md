@@ -2,8 +2,9 @@
 
 ## FreeKiosk logo
 
-`admin/freekiosk.png` is the FreeKiosk logo from [RushB-fr/freekiosk](https://github.com/RushB-fr/freekiosk)
-(`src/assets/images/logo.png`, tag v2.0.0), used under that project's MIT License:
+`admin/freekiosk.png` is derived from the FreeKiosk logo of [RushB-fr/freekiosk](https://github.com/RushB-fr/freekiosk)
+(`src/assets/images/logo.png`, tag v2.0.0): the tablet and padlock are redrawn as a vector image and
+two signal waves are added. The original is used under that project's MIT License:
 
 ```text
 MIT License

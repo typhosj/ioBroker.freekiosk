@@ -84,7 +84,7 @@ Each tablet is a device object named after its ID in the device table.
 
 ## Logo
 
-The adapter icon is the FreeKiosk logo from [RushB-fr/freekiosk](https://github.com/RushB-fr/freekiosk), used under the MIT License of that project. The licence notice ships with the adapter in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](https://github.com/RushB-fr/freekiosk) (redrawn, with added signal waves), used under the MIT License of that project. The licence notice ships with the adapter in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 ## Changelog
 <!--
