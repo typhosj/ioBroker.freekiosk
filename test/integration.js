@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const http = require('node:http');
+const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { expect } = require('chai');
@@ -9,10 +10,17 @@ const restStatus = require('./fixtures/rest-status.json');
 const mqttState = require('./fixtures/mqtt-state.json');
 
 const DUMP = path.join(os.tmpdir(), 'freekiosk.0.json');
-const MQTT_PORT = 18861;
 
 function call(fn, ...args) {
     return new Promise((resolve, reject) => fn(...args, (err, result) => (err ? reject(err) : resolve(result))));
+}
+
+async function freePort() {
+    const probe = net.createServer();
+    await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+    const { port } = probe.address();
+    await new Promise(resolve => probe.close(resolve));
+    return port;
 }
 
 function sleep(ms) {
@@ -55,9 +63,10 @@ tests.integration(path.join(__dirname, '..'), {
             it('creates objects, maps status, sends commands and writes a dump', async function () {
                 this.timeout(60_000);
                 const harness = getHarness();
+                const mqttPort = await freePort();
                 await harness.changeAdapterConfig('freekiosk', {
                     native: {
-                        mqttPort: MQTT_PORT,
+                        mqttPort,
                         mqttBaseTopic: 'freekiosk',
                         mqttUser: 'iob',
                         mqttPassword: 'secret',
@@ -69,10 +78,11 @@ tests.integration(path.join(__dirname, '..'), {
                         ],
                     },
                 });
-                // The harness encrypts the encryptedNative keys itself (legacy XOR with the system secret); never store them encrypted twice or plain.
+                // Differs-from-plain only shows that something was encrypted; the real proof of correct
+                // encryption and decryption is the accepted REST key and the MQTT login further down.
                 const stored = await call(harness.objects.getObject.bind(harness.objects), 'system.adapter.freekiosk.0');
-                expect(stored.native.mqttPassword).not.to.equal('secret');
-                expect(stored.native.restApiKey).not.to.equal('k3y');
+                expect(stored.native.mqttPassword).to.be.a('string').and.not.equal('').and.not.equal('secret');
+                expect(stored.native.restApiKey).to.be.a('string').and.not.equal('').and.not.equal('k3y');
                 await harness.startAdapterAndWait();
                 const get = async id => (await call(harness.states.getState.bind(harness.states), id))?.val;
                 const set = (id, val) => call(harness.states.setState.bind(harness.states), id, { val, ack: false });
@@ -80,7 +90,7 @@ tests.integration(path.join(__dirname, '..'), {
                 await waitFor(() => get('freekiosk.0.hall.battery.level'), 85, 15_000);
                 expect(await get('freekiosk.0.hall.info.online')).to.equal(true);
 
-                const tablet = await mqtt.connectAsync(`mqtt://127.0.0.1:${MQTT_PORT}`, { username: 'iob', password: 'secret', reconnectPeriod: 0 });
+                const tablet = await mqtt.connectAsync(`mqtt://127.0.0.1:${mqttPort}`, { username: 'iob', password: 'secret', reconnectPeriod: 0 });
                 try {
                     await tablet.subscribeAsync('freekiosk/kitchen/set/#');
                     await tablet.publishAsync('freekiosk/kitchen/availability', 'online', { qos: 1, retain: true });
