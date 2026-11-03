@@ -10,121 +10,70 @@
 
 **Tests:** ![Test and Release](https://github.com/typhosj/ioBroker.freekiosk/workflows/Test%20and%20Release/badge.svg)
 
-## freekiosk adapter for ioBroker
+## FreeKiosk adapter for ioBroker
 
-Monitor and control Android tablets running FreeKiosk over REST or MQTT
+[FreeKiosk](https://freekiosk.app) ([RushB-fr/freekiosk](https://github.com/RushB-fr/freekiosk)) is an open-source kiosk app for Android tablets, an alternative to Fully Kiosk Browser. This adapter reads the status of your FreeKiosk tablets into ioBroker states and lets scripts, Blockly and vis control them: screen, brightness, volume, URL, screensaver, text-to-speech, screenshots, camera photos, motion detection, remote keys and display mode.
 
-## Developer manual
-This section is intended for the developer. It can be deleted later.
+Each tablet talks to the adapter over either REST (the adapter polls the tablet) or MQTT (the tablet pushes to a broker built into the adapter).
 
-### DISCLAIMER
+## Requirements
 
-Please make sure that you consider copyrights and trademarks when you use names or logos of a company and add a disclaimer to your README.
-You can check other adapters for examples or ask in the developer community. Using a name or logo of a company without permission may cause legal problems for you.
+* FreeKiosk 2.0.0 or newer (2.0.0 is the tested version)
+* Node.js 22.12 or newer
 
-### Getting started
+## Setup over REST
 
-You are almost done, only a few steps left:
-1. Create a new repository on GitHub with the name `ioBroker.freekiosk`
-1. Initialize the current folder as a new git repository:  
-    ```bash
-    git init -b main
-    git add .
-    git commit -m "Initial commit"
-    ```
-1. Link your local repository with the one on GitHub:  
-    ```bash
-    git remote add origin https://github.com/typhosj/ioBroker.freekiosk
-    ```
+1. In FreeKiosk open Settings > Advanced > REST API, enable it, and note the port (default 8080). Optionally set an API key.
+1. Turn on "Allow remote control" in FreeKiosk, otherwise the tablet refuses all commands.
+1. In the adapter settings add a row to the device table: transport `REST`, the tablet's host and port. If you set an API key, enter it on the REST tab.
 
-1. Push all files to the GitHub repo:  
-    ```bash
-    git push origin main
-    ```
-1. Add a new secret under https://github.com/typhosj/ioBroker.freekiosk/settings/secrets. It must be named `AUTO_MERGE_TOKEN` and contain a personal access token with push access to the repository, e.g. yours. You can create a new token under https://github.com/settings/tokens.
+## Setup over MQTT
 
-1. Head over to [src/main.ts](src/main.ts) and start programming!
+1. In the adapter settings open the MQTT tab and set the port (default 1886), a user and a password.
+1. In FreeKiosk open Settings > Advanced > MQTT and enter the ioBroker host as broker, the port, the same user and password, and a device name.
+1. Turn on "Allow remote control" in FreeKiosk.
+1. Add a row to the device table: transport `MQTT` and the topic ID, which is the device name in lowercase with spaces replaced by `_`.
 
-### Best Practices
-We've collected some [best practices](https://github.com/ioBroker/ioBroker.repositories#development-and-coding-best-practices) regarding ioBroker development and coding in general. If you're new to ioBroker or Node.js, you should
-check them out. If you're already experienced, you should also take a look at them - you might learn something new :)
+Motion detection and periodic screenshots with their intervals exist only over MQTT.
 
-### State Roles
-When creating state objects, it is important to use the correct role for the state. The role defines how the state should be interpreted by visualizations and other adapters. For a list of available roles and their meanings, please refer to the [state roles documentation](https://www.iobroker.net/#en/documentation/dev/stateroles.md).
+## Security
 
-**Important:** Do not invent your own custom role names. If you need a role that is not part of the official list, please contact the ioBroker developer community for guidance and discussion about adding new roles.
+The built-in broker and FreeKiosk's REST API are not encrypted. Keep both inside your LAN, never forward their ports to the internet, and use a broker password that you use nowhere else.
 
-### Scripts in `package.json`
-Several npm scripts are predefined for your convenience. You can run them using `npm run <scriptname>`
-| Script name | Description |
-|-------------|-------------|
-| `build` | Compile the TypeScript sources. |
-| `watch` | Compile the TypeScript sources and watch for changes. |
-| `test:ts` | Executes the tests you defined in `*.test.ts` files. |
-| `test:package` | Ensures your `package.json` and `io-package.json` are valid. |
-| `test:integration` | Tests the adapter startup with an actual instance of ioBroker. |
-| `test` | Performs a minimal test run on package files and your tests. |
-| `check` | Performs a type-check on your code (without compiling anything). |
-| `lint` | Runs `ESLint` to check your code for formatting errors and potential bugs. |
-| `translate` | Translates texts in your adapter to all required languages, see [`@iobroker/adapter-dev`](https://github.com/ioBroker/adapter-dev#manage-translations) for more details. |
-| `release` | Creates a new release, see [`@alcalzone/release-script`](https://github.com/AlCalzone/release-script#usage) for more details. |
+## States
 
-### Configuring the compilation
-The adapter template uses [esbuild](https://esbuild.github.io/) to compile TypeScript and/or React code. You can configure many compilation settings 
-either in `tsconfig.json` or by changing options for the build tasks. These options are described in detail in the
-[`@iobroker/adapter-dev` documentation](https://github.com/ioBroker/adapter-dev#compile-adapter-files).
+Each tablet is a device object named after its ID in the device table.
 
-### Writing tests
-When done right, testing code is invaluable, because it gives you the 
-confidence to change your code while knowing exactly if and when 
-something breaks. A good read on the topic of test-driven development 
-is https://hackernoon.com/introduction-to-test-driven-development-tdd-61a13bc92d92. 
-Although writing tests before the code might seem strange at first, but it has very 
-clear upsides.
+| Channel | Content |
+|---|---|
+| `info` | online flag, last update, transport, FreeKiosk version, model, manufacturer, Android version, IP, device owner and kiosk mode |
+| `battery` | level, charging, temperature |
+| `screen` | screen on/off, brightness, screensaver (active and switch), auto-brightness (read only) |
+| `webview` | current URL (writable to navigate), loading, can go back, URL rotation |
+| `wifi` | SSID, signal strength (dBm and %) |
+| `sensors` | light, proximity; over MQTT also motion and motion always on |
+| `audio` | volume |
+| `system` | memory used, free storage |
+| `images` | paths of the latest screenshot and camera photos with their time; over MQTT also auto-capture switches and intervals |
+| `commands` | reload, wake, reboot, clear cache, lock, restart UI, audio stop and beep, screenshot, camera photos, URL rotation start and stop, text-to-speech, toast, launch app, execute JavaScript, audio play, mode |
+| `remote` | D-pad and navigation buttons, key, key combo and text input |
 
-The template provides you with basic tests for the adapter startup and package files.
-It is recommended that you add your own tests into the mix.
+* Buttons: write `true`.
+* `commands.audioPlay` takes a URL or JSON such as `{"url":"http://...","loop":false,"volume":50}`.
+* `commands.mode` takes `{"mode":"webview","url":"http://..."}`, `{"mode":"external_app","package":"com.example.app"}` or `{"mode":"media_player"}`.
+* Images are stored in the instance file storage. To show one in vis, use the path from `images.*`; the web adapter serves it as `/freekiosk.0/<id>/<file>`.
+* A command is acknowledged only after the tablet accepted it. If the tablet is offline, the command is dropped with a warning and not queued.
 
-### Publishing the adapter
-Using GitHub Actions, you can enable automatic releases on npm whenever you push a new git tag that matches the form 
-`v<major>.<minor>.<patch>`. We **strongly recommend** that you do. The necessary steps are described in `.github/workflows/test-and-release.yml`.
+## Known limits
 
-Since you installed the release script, you can create a new
-release simply by calling:
-```bash
-npm run release
-```
-Additional command line options for the release script are explained in the
-[release-script documentation](https://github.com/AlCalzone/release-script#command-line).
+* Auto-brightness can be read but not switched; FreeKiosk 2.0.0 has no command for it.
+* The objects of a removed tablet stay until you delete them by hand.
+* One API key and one broker login are shared by all tablets.
+* No TLS for the broker.
 
-To get your adapter released in ioBroker, please refer to the documentation 
-of [ioBroker.repositories](https://github.com/ioBroker/ioBroker.repositories#requirements-for-adapter-to-get-added-to-the-latest-repository).
+## Logo
 
-### Test the adapter manually on a local ioBroker installation
-In order to install the adapter locally without publishing, the following steps are recommended:
-1. Create a GitHub repository for your adapter if you haven't already
-1. Push your code to the GitHub repository
-1. Use the ioBroker Admin interface or command line to install the adapter from GitHub:
-    * **Via Admin UI**: Go to the "Adapters" tab, click on "Custom Install" (GitHub icon), and enter your repository URL:
-        ```
-        https://github.com/typhosj/ioBroker.freekiosk
-        ```
-        You can also install from a specific branch by adding `#branchname` at the end:
-        ```
-        https://github.com/typhosj/ioBroker.freekiosk#dev
-        ```
-    * **Via Command Line**: Install using the `iob` command:
-        ```bash
-        iob url https://github.com/typhosj/ioBroker.freekiosk
-        ```
-        Or from a specific branch:
-        ```bash
-        iob url https://github.com/typhosj/ioBroker.freekiosk#dev
-        ```
-
-For later updates:
-1. Push your changes to GitHub
-1. Repeat the installation steps above (via Admin UI or `iob url` command) to update the adapter
+The adapter icon is the FreeKiosk logo, © RushB-fr, used under the MIT License.
 
 ## Changelog
 <!--
@@ -133,7 +82,7 @@ For later updates:
 -->
 
 ### **WORK IN PROGRESS**
-* (typhosj) initial release
+* (typhosj) Initial release: REST and MQTT tablets, status, commands, screenshots, camera photos, motion detection
 
 ## License
 MIT License
