@@ -182,11 +182,14 @@ describe('config', () => {
         };
         // jsonConfig runs a validator as a function body: `data` is the table row (or, outside the
         // table, the whole settings), `globalData` the whole settings, `arrayIndex` the row index.
+        // Admin prepends `return` only when the text contains no `return` anywhere (admin 7.x,
+        // ConfigGeneric: `c.includes('return') ? c : 'return ' + c`); the test does the same.
         type Check = (data: unknown, globalData: unknown, arrayIndex: number) => boolean;
+        const body = (validator: string): string => (validator.includes('return') ? validator : `return ${validator}`);
         const compile = (items: Item[]): Check[] =>
             items
                 .filter(item => item.validator)
-                .map(item => new Function('data', 'globalData', 'arrayIndex', `return ${item.validator}`) as Check);
+                .map(item => new Function('data', 'globalData', 'arrayIndex', body(item.validator!)) as Check);
         const columnChecks = compile(page.items.tabTablets.items.devices.items);
         const fieldChecks = compile(Object.values(page.items.tabMqtt.items));
         expect(fieldChecks).to.have.length(3);
