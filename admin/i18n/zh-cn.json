@@ -1,6 +1,6 @@
 {
     "Tablets": "平板电脑",
-    "devicesHelp": "每台平板电脑一行。对象 ID：字母、数字、_ 和 -。REST 平板电脑需要 Host 和 Port，MQTT 平板电脑需要 Topic ID（FreeKiosk 的设备名称小写，空格用 _ 代替）。",
+    "devicesHelp": "每台平板一行。对象 ID：字母、数字、_ 和 -。REST 平板需要主机和端口。MQTT 平板需要主题 ID：FreeKiosk MQTT 设置中的设备名称，大小写不限；留空则使用对象 ID。保存时转为小写，a-z、0-9、_ 和 - 以外的字符变为 _。",
     "Enabled": "启用",
     "Name": "名称",
     "Object ID": "对象 ID",
@@ -20,7 +20,7 @@
     "mqttHint": "请在 FreeKiosk 的 设置 → 高级 → MQTT 中填入此 ioBroker 主机、端口、用户和密码。仅当至少配置了一台 MQTT 平板电脑时，Broker 才会运行。请勿将该端口暴露到互联网：连接未加密。",
     "idError": "1-32 个字符 A-Z、a-z、0-9、_ 或 -，不能是 info，且不区分大小写唯一",
     "hostError": "主机名或 IP 地址，不含 http://、路径或 %",
-    "topicIdError": "不能包含 /、+、# 或空格；在 MQTT 平板中唯一",
+    "topicIdError": "最多 64 个字符；在 MQTT 平板中唯一，不区分大小写",
     "baseTopicError": "MQTT 平板必填；不能包含 + 或 #，开头和结尾不能是 /",
     "loginError": "MQTT 平板必填"
 }

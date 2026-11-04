@@ -33,7 +33,7 @@ Each tablet talks to the adapter over either REST (the adapter polls the tablet)
 1. In the adapter settings open the MQTT tab and set the port (default 1886), a user and a password. The base topic (default `freekiosk`) must be the same as the base topic in FreeKiosk's MQTT settings.
 1. In FreeKiosk open Settings > Advanced > MQTT and enter the ioBroker host as broker, the port, the same user and password, the same base topic, and a device name.
 1. Turn on "Allow remote control" in FreeKiosk.
-1. Add a row to the device table (see below) with transport `MQTT`. The topic ID is FreeKiosk's device name in lowercase with spaces replaced by `_`; it is optional and may stay empty when it equals the object ID in lowercase.
+1. Add a row to the device table (see below) with transport `MQTT` and FreeKiosk's device name as topic ID. The broker starts only once the table holds an MQTT tablet; until then FreeKiosk reports "connection refused". A tablet that connects under a topic ID not in the table is logged with the topic ID to enter.
 
 Only over MQTT: motion detection, always-on motion detection, periodic screenshots and camera photos, and their intervals. Screenshots and camera photos work over both transports: over REST the adapter downloads them directly when you press the button (screenshot as PNG, camera photo as JPEG); over MQTT the tablet publishes them (JPEG) to the broker.
 
@@ -44,7 +44,7 @@ One row per tablet, up to 50 rows. A row that fails validation is logged and ski
 * **Object ID**: ASCII letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
 * **Transport**: `REST` or `MQTT`.
 * **Host and port** (REST only): a hostname or IP address without `http://`, path or IPv6 zone (`%wlan0`); the port defaults to 8080. MQTT rows need neither.
-* **Topic ID** (MQTT only): may stay empty when FreeKiosk's device name, in lowercase with spaces as `_`, equals the object ID in lowercase.
+* **Topic ID** (MQTT only): FreeKiosk's device name from its MQTT settings, at most 64 characters; empty uses the object ID. FreeKiosk sends the name unchanged (for example the model name `KFTRPWI`); the adapter compares it in lowercase with every character other than `a-z`, `0-9`, `_` and `-` as `_`, so `KFTRPWI` and `kftrpwi`, or `Wall Display` and `wall_display`, are the same tablet. Topic IDs must be unique in that form.
 
 ## Security
 
@@ -98,6 +98,8 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
 * (typhosj) MQTT: an empty image from the tablet no longer replaces the last stored image
 * (typhosj) MQTT: commands are refused with a warning while "Allow remote control" is off in FreeKiosk, instead of being acknowledged
 * (typhosj) MQTT: the broker closes a client that publishes to a `$SYS/` topic
+* (typhosj) MQTT: topic IDs match regardless of case and of characters other than a-z, 0-9, _ and -, because FreeKiosk sends its device name unchanged (such as `KFTRPWI`); commands go out in the spelling the tablet uses
+* (typhosj) MQTT: the log says when the broker does not start because no MQTT tablet is configured, and names the topic ID to enter for a tablet that is not in the device table
 * (typhosj) Screenshots and camera photos are stored one at a time per tablet and kind, so an older image can no longer overwrite a newer one; over REST, presses during a download lead to one more download
 * (typhosj) The adapter now stops at once even while a connection to the broker is still being set up
 * (typhosj) Names, roles and units of the adapter's objects are restored on every start

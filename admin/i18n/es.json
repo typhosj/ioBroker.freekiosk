@@ -1,6 +1,6 @@
 {
     "Tablets": "Tabletas",
-    "devicesHelp": "Una fila por tableta. ID de objeto: letras, dígitos, _ y -. Las tabletas REST necesitan host y puerto, las MQTT el ID de topic (nombre del dispositivo de FreeKiosk en minúsculas, espacios como _).",
+    "devicesHelp": "Una fila por tableta. ID de objeto: letras, dígitos, _ y -. Las tabletas REST necesitan host y puerto. Las tabletas MQTT necesitan el ID de topic: el nombre del dispositivo de los ajustes MQTT de FreeKiosk, con cualquier escritura; vacío usa el ID de objeto. Se guarda en minúsculas; los caracteres distintos de a-z, 0-9, _ y - pasan a ser _.",
     "Enabled": "Activo",
     "Name": "Nombre",
     "Object ID": "ID de objeto",
@@ -20,7 +20,7 @@
     "mqttHint": "Introduzca este host de ioBroker, el puerto, el usuario y la contraseña en FreeKiosk en Ajustes → Avanzado → MQTT. El broker solo se ejecuta mientras haya al menos una tableta MQTT configurada. No exponga el puerto a Internet: la conexión no está cifrada.",
     "idError": "1-32 caracteres A-Z, a-z, 0-9, _ o -, no info, único sin distinguir mayúsculas",
     "hostError": "Nombre de host o dirección IP, sin http://, ruta ni %",
-    "topicIdError": "Sin /, +, # ni espacios; único entre las tabletas MQTT",
+    "topicIdError": "Como máximo 64 caracteres; único entre las tabletas MQTT, sin distinguir mayúsculas",
     "baseTopicError": "Obligatorio para tabletas MQTT; sin +, # ni / al principio o al final",
     "loginError": "Obligatorio para tabletas MQTT"
 }

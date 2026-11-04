@@ -1,6 +1,6 @@
 {
     "Tablets": "Tablets",
-    "devicesHelp": "Eén rij per tablet. Object-ID: letters, cijfers, _ en -. REST-tablets hebben host en poort nodig, MQTT-tablets het topic-ID (apparaatnaam van FreeKiosk in kleine letters, spaties als _).",
+    "devicesHelp": "Eén rij per tablet. Object-ID: letters, cijfers, _ en -. REST-tablets hebben host en poort nodig. MQTT-tablets hebben de topic-ID nodig: de apparaatnaam uit de MQTT-instellingen van FreeKiosk, in elke schrijfwijze; leeg gebruikt de object-ID. Hij wordt in kleine letters opgeslagen, andere tekens dan a-z, 0-9, _ en - worden _.",
     "Enabled": "Actief",
     "Name": "Naam",
     "Object ID": "Object-ID",
@@ -20,7 +20,7 @@
     "mqttHint": "Voer deze ioBroker-host, de poort, de gebruiker en het wachtwoord in bij FreeKiosk onder Instellingen → Geavanceerd → MQTT. De broker draait alleen zolang er minstens één MQTT-tablet is ingesteld. Stel de poort niet bloot aan internet: de verbinding is niet versleuteld.",
     "idError": "1-32 tekens A-Z, a-z, 0-9, _ of -, niet info, uniek ongeacht hoofdletters",
     "hostError": "Hostnaam of IP-adres, zonder http://, pad of %",
-    "topicIdError": "Geen /, +, # of spaties; uniek onder de MQTT-tablets",
+    "topicIdError": "Maximaal 64 tekens; uniek onder de MQTT-tablets, ongeacht hoofdletters",
     "baseTopicError": "Verplicht voor MQTT-tablets; geen +, # en geen / aan het begin of einde",
     "loginError": "Verplicht voor MQTT-tablets"
 }

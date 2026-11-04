@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_DEVICES, validateConfig } from './config';
+import { MAX_DEVICES, normalizeTopicId, validateConfig } from './config';
 
 const base = {
     mqttPort: 1886,
@@ -77,17 +77,25 @@ describe('config', () => {
         expect(errors).to.have.length(8);
     });
 
-    it('validates MQTT topic ids and keeps them unique', () => {
+    it('normalizes MQTT topic ids to lowercase a-z, 0-9, _ and - and keeps them unique', () => {
         const rows = [
-            { ...mqtt, id: 'a', topicId: 'lobby/x' },
-            { ...mqtt, id: 'b', topicId: 'lob+by' },
-            { ...mqtt, id: 'c', topicId: 'lobby#' },
-            { ...mqtt, id: 'd', topicId: 'lobby' },
-            { ...mqtt, id: 'e', topicId: 'lobby' },
+            { ...mqtt, id: 'a', topicId: 'KFTRPWI' },
+            { ...mqtt, id: 'b', topicId: ' Wall Display ' },
+            { ...mqtt, id: 'c', topicId: 'lobby/x+y#' },
+            { ...mqtt, id: 'd', topicId: 'Küche' },
+            { ...mqtt, id: 'E-1', topicId: '' },
+            { ...mqtt, id: 'f', topicId: 'kftrpwi' },
         ];
         const { config, errors } = run({ devices: rows });
-        expect(config.devices.map(d => (d.transport === 'mqtt' ? d.topicId : d.host))).to.deep.equal(['lobby']);
-        expect(errors).to.have.length(4);
+        expect(config.devices.map(d => (d.transport === 'mqtt' ? d.topicId : d.host))).to.deep.equal([
+            'kftrpwi',
+            'wall_display',
+            'lobby_x_y_',
+            'k_che',
+            'e-1',
+        ]);
+        expect(errors).to.deep.equal(['Tablet "Kitchen" skipped: duplicate MQTT topic ID "kftrpwi"']);
+        expect(normalizeTopicId(' Wall Display ')).to.equal('wall_display');
     });
 
     it('accepts a 64-character topic id and rejects 65 characters', () => {
@@ -206,6 +214,19 @@ describe('config', () => {
             { devices: [rest, { ...rest, id: 'HALL', enabled: false }] },
             { devices: [mqtt, { ...mqtt, id: 'other', topicId: 'kitchen' }] },
             { devices: [mqtt, { ...mqtt, id: 'other', topicId: 'Kitchen' }] },
+            {
+                devices: [
+                    { ...mqtt, topicId: 'KFTRPWI' },
+                    { ...mqtt, id: 'other', topicId: 'k f' },
+                ],
+            },
+            {
+                devices: [
+                    { ...mqtt, topicId: 'K F' },
+                    { ...mqtt, id: 'other', topicId: 'k/f' },
+                ],
+            },
+            { devices: [{ ...mqtt, topicId: 'x'.repeat(65) }] },
             { devices: [mqtt, { ...rest, id: 'other', topicId: 'kitchen' }] },
             ...['', ' ', '/x', 'x/', 'a+b', 'a/#', 'home/tablets'].map(mqttBaseTopic => ({
                 mqttBaseTopic,

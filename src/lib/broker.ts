@@ -3,6 +3,7 @@ import type { EventEmitter } from 'node:events';
 import { createServer, type AddressInfo, type Server, type Socket } from 'node:net';
 import { Aedes, type AedesPublishPacket, type Client } from 'aedes';
 import type { ImageKind } from './commands';
+import { normalizeTopicId } from './config';
 
 export const STATE_MAX_BYTES = 64 * 1024;
 export const MQTT_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
@@ -29,7 +30,7 @@ export interface BrokerOptions {
     user: string;
     /** Password of all tablets */
     password: string;
-    /** Topic ids of the configured tablets */
+    /** Topic ids of the configured tablets, in normal form (`normalizeTopicId`) */
     topicIds: string[];
 }
 
@@ -52,12 +53,16 @@ export interface BrokerEvents {
 }
 
 /**
- * Splits `<base>/<topicId>/<suffix>`; undefined for any other topic.
+ * Splits `<base>/<level>/<suffix>`; undefined for any other topic. `topicId` is the level in normal
+ * form, `level` as received.
  *
  * @param baseTopic first topic level(s)
  * @param topic received topic
  */
-export function parseTopic(baseTopic: string, topic: string): { topicId: string; suffix: string } | undefined {
+export function parseTopic(
+    baseTopic: string,
+    topic: string,
+): { topicId: string; level: string; suffix: string } | undefined {
     const prefix = `${baseTopic}/`;
     if (!topic.startsWith(prefix)) {
         return undefined;
@@ -67,7 +72,8 @@ export function parseTopic(baseTopic: string, topic: string): { topicId: string;
     if (slash <= 0 || slash === rest.length - 1) {
         return undefined;
     }
-    return { topicId: rest.slice(0, slash), suffix: rest.slice(slash + 1) };
+    const level = rest.slice(0, slash);
+    return { topicId: normalizeTopicId(level), level, suffix: rest.slice(slash + 1) };
 }
 
 /**
@@ -108,6 +114,8 @@ function preLoginGuard(this: Socket): void {
 export class Broker {
     private readonly owner = new Map<string, Client>();
     private readonly boundTo = new WeakMap<Client, string>();
+    /** Topic level as the client writes it (KFTRPWI); commands must use the tablet's own spelling. */
+    private readonly levelOf = new WeakMap<Client, string>();
     /** Clients subscribed to their `set/#`; FreeKiosk subscribes only with remote control allowed. */
     private readonly listening = new WeakSet<Client>();
     private readonly availability = new Map<string, string>();
@@ -164,7 +172,7 @@ export class Broker {
                 return;
             }
             if (!this.known.has(parsed.topicId)) {
-                const name = printable(parsed.topicId);
+                const name = printable(parsed.level);
                 // Bounded: a client may invent any number of topic ids.
                 if (!this.unknownSeen.has(name) && this.unknownSeen.size < UNKNOWN_MAX) {
                     this.unknownSeen.add(name);
@@ -173,7 +181,7 @@ export class Broker {
                 done(null);
                 return;
             }
-            done(this.bind(client, parsed.topicId));
+            done(this.bind(client, parsed.topicId, parsed.level));
         };
         aedes.authorizeSubscribe = (client, subscription, done) => {
             const parsed = parseTopic(this.opts.baseTopic, subscription.topic);
@@ -181,7 +189,7 @@ export class Broker {
                 parsed !== undefined &&
                 parsed.suffix === 'set/#' &&
                 this.known.has(parsed.topicId) &&
-                this.bind(client, parsed.topicId) === null;
+                this.bind(client, parsed.topicId, parsed.level) === null;
             done(null, allowed ? subscription : null);
         };
         aedes.on('subscribe', (subscriptions, client) => {
@@ -282,7 +290,7 @@ export class Broker {
             this.aedes.publish(
                 {
                     cmd: 'publish',
-                    topic: `${this.opts.baseTopic}/${topicId}/set/${entity}`,
+                    topic: `${this.opts.baseTopic}/${this.levelOf.get(owner) ?? topicId}/set/${entity}`,
                     payload: Buffer.from(payload),
                     qos: 1,
                     retain: false,
@@ -303,11 +311,11 @@ export class Broker {
     }
 
     private commandFilter(client: Client): string | undefined {
-        const topicId = this.boundTo.get(client);
-        return topicId === undefined ? undefined : `${this.opts.baseTopic}/${topicId}/set/#`;
+        const level = this.levelOf.get(client);
+        return level === undefined ? undefined : `${this.opts.baseTopic}/${level}/set/#`;
     }
 
-    private bind(client: Client, topicId: string): Error | null {
+    private bind(client: Client, topicId: string, level: string): Error | null {
         const bound = this.boundTo.get(client);
         if (bound !== undefined) {
             return bound === topicId ? null : new Error('client is bound to another topic id');
@@ -318,6 +326,7 @@ export class Broker {
             return new Error('topic id is in use by another client');
         }
         this.boundTo.set(client, topicId);
+        this.levelOf.set(client, level);
         this.owner.set(topicId, client);
         return null;
     }

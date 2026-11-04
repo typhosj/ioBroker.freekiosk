@@ -83,7 +83,9 @@ class Freekiosk extends utils.Adapter {
         }
         this.settings = config;
         if (!config.devices.length) {
-            this.log.warn('No valid tablet configured; add one in the instance settings.');
+            this.log.warn(
+                'No valid tablet configured; add one in the instance settings. The MQTT broker starts only with an MQTT tablet in the table.',
+            );
             return;
         }
         for (const device of config.devices) {
@@ -113,6 +115,9 @@ class Freekiosk extends utils.Adapter {
             if (this.stopping) {
                 return;
             }
+        } else {
+            // A tablet set to MQTT before its row exists gets "connection refused"; this says why.
+            this.log.info('MQTT broker not started: no MQTT tablet in the device table');
         }
         for (const tablet of this.tablets.values()) {
             if (tablet.config.transport === 'rest') {
@@ -254,7 +259,9 @@ class Freekiosk extends utils.Adapter {
                         submit(data);
                     }),
                     unknownTablet: topicId =>
-                        this.log.info(`Tablet "${topicId}" connected but is not in the device table`),
+                        this.log.info(
+                            `Tablet "${topicId}" connected but is not in the device table; enter ${topicId} as its topic ID`,
+                        ),
                     dropped: (topicId, reason) => this.log.warn(`${topicId}: message dropped, ${reason}`),
                     loginRefused: address =>
                         this.log.warn(`MQTT login refused from ${address}; check user and password in FreeKiosk`),

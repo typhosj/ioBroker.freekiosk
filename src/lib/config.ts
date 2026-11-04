@@ -23,7 +23,7 @@ export interface RestDevice extends DeviceBase {
 export interface MqttDevice extends DeviceBase {
     /** How the tablet is reached */
     transport: 'mqtt';
-    /** Second topic level, unique */
+    /** Second topic level in normal form (`normalizeTopicId`), unique */
     topicId: string;
 }
 
@@ -56,7 +56,21 @@ const ID_RE = /^[A-Za-z0-9_-]{1,32}$/;
 const RESERVED_IDS = new Set(['info']);
 const HOSTNAME_RE =
     /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
-const TOPIC_LEVEL_RE = /^[^/+#\s]{1,64}$/;
+const TOPIC_ID_MAX = 64;
+
+/**
+ * Normal form of an MQTT topic ID: lowercase, every character other than a-z, 0-9, _ and - as _.
+ * The broker normalizes the topic level a tablet publishes under the same way, so the spelling of
+ * FreeKiosk's device name (KFTRPWI, Wall Display) does not matter.
+ *
+ * @param value topic ID as configured or as received
+ */
+export function normalizeTopicId(value: string): string {
+    return value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_');
+}
 
 function text(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
@@ -152,9 +166,9 @@ export function validateConfig(native: Record<string, unknown>): { config: Insta
                 mqttSkipped = true;
                 continue;
             }
-            const topicId = text(row.topicId) || id.toLowerCase();
-            if (!TOPIC_LEVEL_RE.test(topicId)) {
-                skip('MQTT topic ID must not contain /, +, # or spaces');
+            const topicId = normalizeTopicId(text(row.topicId) || id);
+            if (topicId.length > TOPIC_ID_MAX) {
+                skip(`MQTT topic ID must be at most ${TOPIC_ID_MAX} characters`);
                 continue;
             }
             if (topics.has(topicId)) {

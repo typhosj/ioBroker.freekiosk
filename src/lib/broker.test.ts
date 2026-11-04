@@ -49,9 +49,14 @@ function willPacket(topic: string, payload: string): Record<string, unknown> {
 
 describe('parseTopic', () => {
     it('splits base, topic id and suffix', () => {
-        expect(parseTopic('freekiosk', 'freekiosk/lobby/state')).to.deep.equal({ topicId: 'lobby', suffix: 'state' });
-        expect(parseTopic('a/b', 'a/b/lobby/image/screenshot')).to.deep.equal({
+        expect(parseTopic('freekiosk', 'freekiosk/lobby/state')).to.deep.equal({
             topicId: 'lobby',
+            level: 'lobby',
+            suffix: 'state',
+        });
+        expect(parseTopic('a/b', 'a/b/Wall Display/image/screenshot')).to.deep.equal({
+            topicId: 'wall_display',
+            level: 'Wall Display',
             suffix: 'image/screenshot',
         });
         for (const topic of [
@@ -232,6 +237,33 @@ describe('Broker', () => {
         await until(() => broker.isOnline('kitchen'));
         await broker.publish('kitchen', 'screen', 'OFF');
         expect(await received).to.deep.equal(['freekiosk/kitchen/set/screen', 'OFF']);
+    });
+
+    it('matches a topic id in any spelling and sends commands in the spelling the tablet uses', async () => {
+        // FreeKiosk uses its device name unchanged as topic id, e.g. the model name KFTRPWI.
+        const client = await tablet();
+        await client.subscribeAsync('freekiosk/KITCHEN/set/#');
+        await client.publishAsync('freekiosk/KITCHEN/availability', 'online');
+        await client.publishAsync('freekiosk/KITCHEN/state', '{}');
+        await until(() => broker.isOnline('kitchen') && rec.calls.some(c => c[0] === 'status'));
+        expect(rec.calls).to.deep.include(['status', 'kitchen', {}]);
+        expect(rec.calls.filter(c => c[0] === 'unknownTablet')).to.have.length(0);
+        const received = new Promise<[string, string]>(resolve =>
+            client.once('message', (topic, payload) => resolve([topic, payload.toString()])),
+        );
+        await broker.publish('kitchen', 'screen', 'OFF');
+        expect(await received).to.deep.equal(['freekiosk/KITCHEN/set/screen', 'OFF']);
+    });
+
+    it('treats two spellings of one topic id as the same tablet', async () => {
+        const first = await tablet({ clientId: 'freekiosk_a' });
+        await first.publishAsync('freekiosk/Kitchen/availability', 'online');
+        await until(() => broker.isOnline('kitchen'));
+        const second = await tablet({ clientId: 'freekiosk_b' });
+        const closed = new Promise<void>(resolve => second.once('close', resolve));
+        second.publish('freekiosk/kitchen/availability', 'online');
+        await closed;
+        expect(broker.isOnline('kitchen')).to.equal(true);
     });
 
     it('refuses commands while the tablet does not subscribe to them', async () => {
