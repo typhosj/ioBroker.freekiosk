@@ -18,7 +18,9 @@
     "User": "Użytkownik",
     "Password": "Hasło",
     "mqttHint": "Wpisz ten host ioBroker, port, użytkownika i hasło w FreeKiosk w Ustawienia → Zaawansowane → MQTT. Broker działa tylko wtedy, gdy skonfigurowano co najmniej jeden tablet MQTT. Nie udostępniaj portu w internecie: połączenie nie jest szyfrowane.",
-    "idError": "1-32 znaki A-Z, a-z, 0-9, _ lub -, nie info",
+    "idError": "1-32 znaki A-Z, a-z, 0-9, _ lub -, nie info, unikalny bez względu na wielkość liter",
     "hostError": "Nazwa hosta lub adres IP, bez http://, ścieżki i %",
-    "topicIdError": "Bez /, +, # i spacji"
+    "topicIdError": "Bez /, +, # i spacji; unikalny wśród tabletów MQTT",
+    "baseTopicError": "Wymagane dla tabletów MQTT; bez +, # i bez / na początku lub końcu",
+    "loginError": "Wymagane dla tabletów MQTT"
 }

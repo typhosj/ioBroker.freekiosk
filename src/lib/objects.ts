@@ -61,7 +61,7 @@ const command = (id: string, name: string, role = 'text'): StateDef => ({
 
 export const STATES: StateDef[] = [
     { id: 'info.online', name: 'Tablet reachable', type: 'boolean', role: 'indicator.reachable', ...ro },
-    { id: 'info.lastUpdate', name: 'Last status received', type: 'number', role: 'date', ...ro },
+    { id: 'info.lastUpdate', name: 'Last status received', type: 'number', role: 'date', unit: 'ms', ...ro },
     { id: 'info.transport', name: 'Transport', type: 'string', role: 'text', ...ro },
     {
         id: 'info.version',
@@ -258,11 +258,11 @@ export const STATES: StateDef[] = [
         source: 'storage.availableMB',
     },
     { id: 'images.screenshot', name: 'Screenshot file', type: 'string', role: 'text.url', ...ro },
-    { id: 'images.screenshotTime', name: 'Screenshot taken', type: 'number', role: 'date', ...ro },
+    { id: 'images.screenshotTime', name: 'Screenshot taken', type: 'number', role: 'date', unit: 'ms', ...ro },
     { id: 'images.cameraFront', name: 'Front camera photo file', type: 'string', role: 'text.url', ...ro },
-    { id: 'images.cameraFrontTime', name: 'Front camera photo taken', type: 'number', role: 'date', ...ro },
+    { id: 'images.cameraFrontTime', name: 'Front camera photo taken', type: 'number', role: 'date', unit: 'ms', ...ro },
     { id: 'images.cameraBack', name: 'Back camera photo file', type: 'string', role: 'text.url', ...ro },
-    { id: 'images.cameraBackTime', name: 'Back camera photo taken', type: 'number', role: 'date', ...ro },
+    { id: 'images.cameraBackTime', name: 'Back camera photo taken', type: 'number', role: 'date', unit: 'ms', ...ro },
     {
         id: 'images.screenshotAuto',
         name: 'Publish screenshots periodically',

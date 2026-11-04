@@ -1,4 +1,5 @@
-import { isObject, type Transport } from './config';
+import type { Transport } from './config';
+import { isObject } from './guards';
 import { statesFor, type StateDef } from './objects';
 
 export type StateValue = boolean | number | string;

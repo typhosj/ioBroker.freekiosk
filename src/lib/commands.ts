@@ -1,4 +1,4 @@
-import { isObject } from './config';
+import { isObject } from './guards';
 import type { StateValue } from './status';
 
 /** Camera or screen capture a REST tablet fetches directly. */
@@ -91,18 +91,23 @@ const TEXTS = new Map<string, { rest: string; field: string; mqtt: string }>([
     ['remote.text', { rest: '/api/remote/text', field: 'text', mqtt: 'keyboard_text' }],
 ]);
 
-function make(rest: RestRequest | undefined, entity: string, payload: string, ackValue: StateValue): CommandResult {
+function commandFor(
+    rest: RestRequest | undefined,
+    entity: string,
+    payload: string,
+    ackValue: StateValue,
+): CommandResult {
     return { command: { rest, mqtt: { entity, payload }, ackValue } };
 }
 
-function textOf(value: unknown): string | { error: string } {
+function withText(value: unknown, build: (text: string) => CommandResult): CommandResult {
     if (typeof value !== 'string' || !value.trim()) {
         return { error: 'expects a non-empty text' };
     }
     if (Buffer.byteLength(value) > MAX_TEXT_BYTES) {
         return { error: `text is longer than ${MAX_TEXT_BYTES} bytes` };
     }
-    return value;
+    return build(value);
 }
 
 function parseObject(text: string): Record<string, unknown> | undefined {
@@ -118,11 +123,7 @@ function isHttpUrl(value: unknown): value is string {
     return typeof value === 'string' && /^https?:\/\//i.test(value) && URL.canParse(value);
 }
 
-function audioPlay(value: unknown): CommandResult {
-    const text = textOf(value);
-    if (typeof text !== 'string') {
-        return text;
-    }
+function audioPlay(text: string): CommandResult {
     const spec = text.trimStart().startsWith('{') ? parseObject(text) : { url: text.trim() };
     if (!spec) {
         return { error: 'expects a URL or JSON {"url": ..., "loop": ..., "volume": ...}' };
@@ -138,14 +139,10 @@ function audioPlay(value: unknown): CommandResult {
         return { error: 'volume must be an integer 0-100' };
     }
     const body = { url, loop, volume };
-    return make({ method: 'POST', path: '/api/audio/play', body }, 'audio_play', JSON.stringify(body), text);
+    return commandFor({ method: 'POST', path: '/api/audio/play', body }, 'audio_play', JSON.stringify(body), text);
 }
 
-function displayMode(value: unknown): CommandResult {
-    const text = textOf(value);
-    if (typeof text !== 'string') {
-        return text;
-    }
+function displayMode(text: string): CommandResult {
     const spec = parseObject(text);
     if (!spec || typeof spec.mode !== 'string' || !MODES.has(spec.mode)) {
         return {
@@ -165,7 +162,7 @@ function displayMode(value: unknown): CommandResult {
         }
         body.package = spec.package;
     }
-    return make({ method: 'POST', path: '/api/mode', body }, 'mode', JSON.stringify(body), text);
+    return commandFor({ method: 'POST', path: '/api/mode', body }, 'mode', JSON.stringify(body), text);
 }
 
 /**
@@ -197,7 +194,7 @@ export function buildCommand(id: string, value: unknown): CommandResult {
         const rest: RestRequest | undefined = toggle.rest
             ? { method: 'POST', path: toggle.rest[value ? 0 : 1] }
             : undefined;
-        return make(rest, toggle.mqtt, value ? 'ON' : 'OFF', value);
+        return commandFor(rest, toggle.mqtt, value ? 'ON' : 'OFF', value);
     }
     const level = LEVELS.get(id);
     if (level) {
@@ -207,47 +204,41 @@ export function buildCommand(id: string, value: unknown): CommandResult {
         const rest: RestRequest | undefined = level.rest
             ? { method: 'POST', path: level.rest, body: { value } }
             : undefined;
-        return make(rest, level.mqtt, String(value), value);
+        return commandFor(rest, level.mqtt, String(value), value);
     }
     const plain = TEXTS.get(id);
     if (plain) {
-        const text = textOf(value);
-        if (typeof text !== 'string') {
-            return text;
-        }
-        return make({ method: 'POST', path: plain.rest, body: { [plain.field]: text } }, plain.mqtt, text, text);
+        return withText(value, text =>
+            commandFor({ method: 'POST', path: plain.rest, body: { [plain.field]: text } }, plain.mqtt, text, text),
+        );
     }
     switch (id) {
-        case 'webview.url': {
-            const text = textOf(value);
-            if (typeof text !== 'string') {
-                return text;
-            }
-            const url = text.trim();
-            if (!isHttpUrl(url)) {
-                return { error: 'needs an http(s) URL' };
-            }
-            return make({ method: 'POST', path: '/api/url', body: { url } }, 'url', url, url);
-        }
-        case 'commands.launchApp': {
-            const text = textOf(value);
-            if (typeof text !== 'string') {
-                return text;
-            }
-            if (!PACKAGE_RE.test(text)) {
-                return { error: 'expects an Android package name such as com.example.app' };
-            }
-            return make({ method: 'POST', path: '/api/app/launch', body: { package: text } }, 'launch_app', text, text);
-        }
+        case 'webview.url':
+            return withText(value, text => {
+                const url = text.trim();
+                if (!isHttpUrl(url)) {
+                    return { error: 'needs an http(s) URL' };
+                }
+                // Sent trimmed, acknowledged with the value as written.
+                return commandFor({ method: 'POST', path: '/api/url', body: { url } }, 'url', url, text);
+            });
+        case 'commands.launchApp':
+            return withText(value, text => {
+                if (!PACKAGE_RE.test(text)) {
+                    return { error: 'expects an Android package name such as com.example.app' };
+                }
+                const body = { package: text };
+                return commandFor({ method: 'POST', path: '/api/app/launch', body }, 'launch_app', text, text);
+            });
         case 'commands.audioPlay':
-            return audioPlay(value);
+            return withText(value, audioPlay);
         case 'commands.mode':
-            return displayMode(value);
+            return withText(value, displayMode);
         case 'remote.key':
             if (typeof value !== 'string' || !KEY_RE.test(value)) {
                 return { error: 'expects a key name such as enter, a or f5' };
             }
-            return make(
+            return commandFor(
                 { method: 'GET', path: `/api/remote/keyboard/${encodeURIComponent(value)}` },
                 'keyboard_key',
                 value,
@@ -257,7 +248,7 @@ export function buildCommand(id: string, value: unknown): CommandResult {
             if (typeof value !== 'string' || !COMBO_RE.test(value)) {
                 return { error: 'expects a combination such as ctrl+c' };
             }
-            return make(
+            return commandFor(
                 { method: 'GET', path: `/api/remote/keyboard?map=${encodeURIComponent(value)}` },
                 'keyboard_combo',
                 value,

@@ -31,8 +31,8 @@ describe('config', () => {
         const { config, errors } = run({ devices: [rest, { ...mqtt, id: 'Kitchen' }] });
         expect(errors).to.deep.equal([]);
         expect(config.devices).to.deep.equal([
-            { id: 'hall', name: 'Hall', transport: 'rest', host: '192.168.1.50', port: 8080, topicId: '' },
-            { id: 'Kitchen', name: 'Kitchen', transport: 'mqtt', host: '', port: 0, topicId: 'kitchen' },
+            { id: 'hall', name: 'Hall', transport: 'rest', host: '192.168.1.50', port: 8080 },
+            { id: 'Kitchen', name: 'Kitchen', transport: 'mqtt', topicId: 'kitchen' },
         ]);
     });
 
@@ -86,7 +86,7 @@ describe('config', () => {
             { ...mqtt, id: 'e', topicId: 'lobby' },
         ];
         const { config, errors } = run({ devices: rows });
-        expect(config.devices.map(d => d.topicId)).to.deep.equal(['lobby']);
+        expect(config.devices.map(d => (d.transport === 'mqtt' ? d.topicId : d.host))).to.deep.equal(['lobby']);
         expect(errors).to.have.length(4);
     });
 
@@ -164,16 +164,62 @@ describe('config', () => {
         expect(errors).to.have.length(1);
     });
 
-    it('agrees with the validators of the admin device table', () => {
-        const table = (
-            JSON.parse(readFileSync(join(__dirname, '../../admin/jsonConfig.json'), 'utf8')) as {
-                items: { tabTablets: { items: { devices: { items: { attr: string; validator?: string }[] } } } };
-            }
-        ).items.tabTablets.items.devices.items;
-        // jsonConfig runs a validator as a function body with the table row as `data`.
-        const checks = table
-            .filter(column => column.validator)
-            .map(column => new Function('data', `return ${column.validator}`) as (row: unknown) => boolean);
+    it('agrees with the validators of the admin page', () => {
+        type Item = { validator?: string };
+        const page = JSON.parse(readFileSync(join(__dirname, '../../admin/jsonConfig.json'), 'utf8')) as {
+            items: {
+                tabTablets: { items: { devices: { items: Item[] } } };
+                tabMqtt: { items: Record<string, Item> };
+            };
+        };
+        // jsonConfig runs a validator as a function body: `data` is the table row (or, outside the
+        // table, the whole settings), `globalData` the whole settings, `arrayIndex` the row index.
+        type Check = (data: unknown, globalData: unknown, arrayIndex: number) => boolean;
+        const compile = (items: Item[]): Check[] =>
+            items
+                .filter(item => item.validator)
+                .map(item => new Function('data', 'globalData', 'arrayIndex', `return ${item.validator}`) as Check);
+        const columnChecks = compile(page.items.tabTablets.items.devices.items);
+        const fieldChecks = compile(Object.values(page.items.tabMqtt.items));
+        expect(fieldChecks).to.have.length(3);
+        const savable = (native: Record<string, unknown>): boolean => {
+            const rows = native.devices as unknown[];
+            return (
+                fieldChecks.every(check => check(native, native, -1)) &&
+                rows.every((row, index) => columnChecks.every(check => check(row, native, index)))
+            );
+        };
+        const cases: Record<string, unknown>[] = [
+            ...[
+                '192.168.1.50',
+                '::1',
+                '2001:db8::1',
+                '::ffff:192.168.1.5',
+                '1::2::3',
+                ':::',
+                '12345::1',
+                'g::1',
+                '::1]/x[',
+                '1.2.3.4:8080',
+            ].map(host => ({ devices: [{ ...rest, host }] })),
+            { devices: [rest, { ...rest, id: 'Hall' }] },
+            { devices: [rest, { ...rest, id: 'HALL', enabled: false }] },
+            { devices: [mqtt, { ...mqtt, id: 'other', topicId: 'kitchen' }] },
+            { devices: [mqtt, { ...mqtt, id: 'other', topicId: 'Kitchen' }] },
+            { devices: [mqtt, { ...rest, id: 'other', topicId: 'kitchen' }] },
+            ...['', ' ', '/x', 'x/', 'a+b', 'a/#', 'home/tablets'].map(mqttBaseTopic => ({
+                mqttBaseTopic,
+                devices: [mqtt],
+            })),
+            { mqttBaseTopic: '#', devices: [rest] },
+            { mqttUser: ' ', devices: [mqtt] },
+            { mqttPassword: '', devices: [mqtt] },
+            { mqttUser: '', mqttPassword: '', devices: [rest, { ...mqtt, enabled: false }] },
+        ];
+        for (const native of cases) {
+            const full = { ...base, ...native };
+            expect(savable(full), JSON.stringify(native)).to.equal(validateConfig(full).errors.length === 0);
+        }
         const rows = [
             rest,
             { ...rest, id: 'a-b_C9' },
@@ -197,10 +243,7 @@ describe('config', () => {
         ];
         for (const row of rows) {
             const runtime = run({ devices: [row] }).config.devices.length === 1;
-            expect(
-                checks.every(check => check(row)),
-                JSON.stringify(row),
-            ).to.equal(runtime);
+            expect(savable({ ...base, devices: [row] }), JSON.stringify(row)).to.equal(runtime);
         }
     });
 

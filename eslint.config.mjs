@@ -10,7 +10,6 @@ export default [
             '.dev-server/',
             '.vscode/',
             '*.test.js',
-            'test/**/*.js',
             '*.config.mjs',
             'build',
             'dist',
@@ -20,6 +19,13 @@ export default [
             '**/adapter-config.d.ts',
             'widgets/**/*.js'
         ],
+    },
+    {
+        // The JavaScript tests run under mocha.
+        files: ['test/**/*.js'],
+        languageOptions: {
+            globals: { describe: 'readonly', it: 'readonly', before: 'readonly', after: 'readonly' },
+        },
     },
     {
         // you may disable some 'jsdoc' warnings - but using jsdoc is highly recommended

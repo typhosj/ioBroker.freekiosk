@@ -170,6 +170,13 @@ describe('Broker', () => {
         expect(client.connected).to.equal(true);
     });
 
+    it('closes a client that publishes to a $SYS/ topic, as the aedes default does', async () => {
+        const client = await tablet();
+        const closed = new Promise<void>(resolve => client.once('close', resolve));
+        client.publish('$SYS/broker/clients/connected', '1');
+        await closed;
+    });
+
     it('binds a client to one topic id', async () => {
         const kitchen = await tablet({ clientId: 'freekiosk_a' });
         await kitchen.publishAsync('freekiosk/kitchen/availability', 'online');

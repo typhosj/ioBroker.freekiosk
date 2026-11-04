@@ -1,22 +1,36 @@
 import { isIP } from 'node:net';
+import { isObject } from './guards';
 
-export type Transport = 'rest' | 'mqtt';
-
-/** One validated tablet row. */
-export interface DeviceConfig {
+/** Fields of every validated tablet row. */
+interface DeviceBase {
     /** Object ID segment, unique case-insensitively */
     id: string;
     /** Display name, falls back to the ID */
     name: string;
+}
+
+/** A tablet the adapter polls over FreeKiosk's REST API. */
+export interface RestDevice extends DeviceBase {
     /** How the tablet is reached */
-    transport: Transport;
-    /** REST only */
+    transport: 'rest';
+    /** Hostname or IP address */
     host: string;
-    /** REST only, 0 for MQTT */
+    /** REST port */
     port: number;
-    /** MQTT only, empty for REST */
+}
+
+/** A tablet that connects to the built-in MQTT broker. */
+export interface MqttDevice extends DeviceBase {
+    /** How the tablet is reached */
+    transport: 'mqtt';
+    /** Second topic level, unique */
     topicId: string;
 }
+
+/** One validated tablet row. */
+export type DeviceConfig = RestDevice | MqttDevice;
+
+export type Transport = DeviceConfig['transport'];
 
 /** Validated instance settings. */
 export interface InstanceConfig {
@@ -43,15 +57,6 @@ const RESERVED_IDS = new Set(['info']);
 const HOSTNAME_RE =
     /^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/;
 const TOPIC_LEVEL_RE = /^[^/+#\s]{1,64}$/;
-
-/**
- * True for a plain, non-null, non-array object.
- *
- * @param value Any value from the native settings or a payload
- */
-export function isObject(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function text(value: unknown): string {
     return typeof value === 'string' ? value.trim() : '';
@@ -141,7 +146,7 @@ export function validateConfig(native: Record<string, unknown>): { config: Insta
                 skip(`port "${String(row.port)}" is invalid`);
                 continue;
             }
-            config.devices.push({ id, name, transport: 'rest', host, port: restPort, topicId: '' });
+            config.devices.push({ id, name, transport: 'rest', host, port: restPort });
         } else if (row.transport === 'mqtt') {
             if (mqttProblem) {
                 mqttSkipped = true;
@@ -157,7 +162,7 @@ export function validateConfig(native: Record<string, unknown>): { config: Insta
                 continue;
             }
             topics.add(topicId);
-            config.devices.push({ id, name, transport: 'mqtt', host: '', port: 0, topicId });
+            config.devices.push({ id, name, transport: 'mqtt', topicId });
         } else {
             skip('transport must be REST or MQTT');
             continue;

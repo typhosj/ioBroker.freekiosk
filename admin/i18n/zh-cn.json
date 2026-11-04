@@ -18,7 +18,9 @@
     "User": "用户",
     "Password": "密码",
     "mqttHint": "请在 FreeKiosk 的 设置 → 高级 → MQTT 中填入此 ioBroker 主机、端口、用户和密码。仅当至少配置了一台 MQTT 平板电脑时，Broker 才会运行。请勿将该端口暴露到互联网：连接未加密。",
-    "idError": "1-32 个字符 A-Z、a-z、0-9、_ 或 -，不能是 info",
+    "idError": "1-32 个字符 A-Z、a-z、0-9、_ 或 -，不能是 info，且不区分大小写唯一",
     "hostError": "主机名或 IP 地址，不含 http://、路径或 %",
-    "topicIdError": "不能包含 /、+、# 或空格"
+    "topicIdError": "不能包含 /、+、# 或空格；在 MQTT 平板中唯一",
+    "baseTopicError": "MQTT 平板必填；不能包含 + 或 #，开头和结尾不能是 /",
+    "loginError": "MQTT 平板必填"
 }

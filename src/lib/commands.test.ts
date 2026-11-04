@@ -110,7 +110,7 @@ describe('commands', () => {
         expect(ok('webview.url', ' https://x/y ')).to.deep.equal({
             rest: { method: 'POST', path: '/api/url', body: { url: 'https://x/y' } },
             mqtt: { entity: 'url', payload: 'https://x/y' },
-            ackValue: 'https://x/y',
+            ackValue: ' https://x/y ', // acknowledged as written, not as sent
         });
         expect(ok('webview.url', 'HTTP://x').mqtt?.payload).to.equal('HTTP://x');
         for (const value of ['javascript:alert(1)', 'file:///sdcard/a.html', 'x', 'http://', '', 5]) {

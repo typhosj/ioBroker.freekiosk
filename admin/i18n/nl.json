@@ -18,7 +18,9 @@
     "User": "Gebruiker",
     "Password": "Wachtwoord",
     "mqttHint": "Voer deze ioBroker-host, de poort, de gebruiker en het wachtwoord in bij FreeKiosk onder Instellingen → Geavanceerd → MQTT. De broker draait alleen zolang er minstens één MQTT-tablet is ingesteld. Stel de poort niet bloot aan internet: de verbinding is niet versleuteld.",
-    "idError": "1-32 tekens A-Z, a-z, 0-9, _ of -, niet info",
+    "idError": "1-32 tekens A-Z, a-z, 0-9, _ of -, niet info, uniek ongeacht hoofdletters",
     "hostError": "Hostnaam of IP-adres, zonder http://, pad of %",
-    "topicIdError": "Geen /, +, # of spaties"
+    "topicIdError": "Geen /, +, # of spaties; uniek onder de MQTT-tablets",
+    "baseTopicError": "Verplicht voor MQTT-tablets; geen +, # en geen / aan het begin of einde",
+    "loginError": "Verplicht voor MQTT-tablets"
 }

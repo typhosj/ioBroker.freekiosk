@@ -5,7 +5,7 @@ import { Aedes, type AedesPublishPacket, type Client } from 'aedes';
 import type { ImageKind } from './commands';
 
 export const STATE_MAX_BYTES = 64 * 1024;
-export const IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+export const MQTT_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 
 /** Bytes a connection may send before its login succeeded. */
 export const PRELOGIN_MAX_BYTES = 64 * 1024;
@@ -147,6 +147,11 @@ export class Broker {
             done(null, ok);
         };
         aedes.authorizePublish = (client, packet, done) => {
+            // Replacing the handler drops aedes' default check, which keeps clients off $SYS/.
+            if (packet.topic.startsWith('$SYS/')) {
+                done(new Error('$SYS/ topics are reserved'));
+                return;
+            }
             if (!client) {
                 done(null);
                 return;
@@ -335,10 +340,10 @@ export class Broker {
         if (kind && !payload.length) {
             return; // FreeKiosk clears the retained image of a disabled stream; the last image stays
         }
-        const limit = kind ? IMAGE_MAX_BYTES : STATE_MAX_BYTES;
+        const limit = kind ? MQTT_IMAGE_MAX_BYTES : STATE_MAX_BYTES;
         if (payload.length > limit) {
             const what = kind ? 'image' : 'state';
-            this.once(`size-${what}:${topicId}`, () =>
+            this.reportOnce(`size-${what}:${topicId}`, () =>
                 this.events.dropped(topicId, `${what} of ${payload.length} bytes is over the limit of ${limit}`),
             );
             return;
@@ -351,7 +356,7 @@ export class Broker {
             try {
                 raw = JSON.parse(payload.toString());
             } catch {
-                this.once(`json:${topicId}`, () => this.events.dropped(topicId, 'state is not valid JSON'));
+                this.reportOnce(`json:${topicId}`, () => this.events.dropped(topicId, 'state is not valid JSON'));
                 return;
             }
             this.events.status(topicId, raw);
@@ -368,7 +373,7 @@ export class Broker {
         }
     }
 
-    private once(key: string, report: () => void): void {
+    private reportOnce(key: string, report: () => void): void {
         if (!this.reported.has(key)) {
             this.reported.add(key);
             report();

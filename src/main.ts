@@ -1,9 +1,10 @@
 import * as utils from '@iobroker/adapter-core';
 import { Broker } from './lib/broker';
 import { buildCommand, type ImageKind } from './lib/commands';
-import { validateConfig, type DeviceConfig, type InstanceConfig } from './lib/config';
+import { validateConfig, type DeviceConfig, type InstanceConfig, type RestDevice } from './lib/config';
 import { CHANNELS, mqttOnlyIds, statesFor, type StateDef } from './lib/objects';
-import { fetchImage, fetchStatus, HttpError, Poller, sendRest, type RestTarget } from './lib/rest';
+import { Poller } from './lib/poller';
+import { fetchImage, fetchStatus, HttpError, sendRest, type RestTarget } from './lib/rest';
 import { latestOnly } from './lib/latest';
 import { mapStatus } from './lib/status';
 
@@ -15,9 +16,11 @@ interface Tablet {
     submitStatus: (raw: unknown) => void;
     /** One write per image kind in flight, the newest image waiting (MQTT tablets push them unasked) */
     submitImage: Partial<Record<ImageKind, (data: Buffer) => void>>;
+    /** REST: one download per image kind in flight, one more requested download waiting */
+    requestImage: Partial<Record<ImageKind, () => void>>;
 }
 
-function errorText(err: unknown): string {
+function describeError(err: unknown): string {
     if (!(err instanceof Error)) {
         return String(err);
     }
@@ -60,12 +63,12 @@ class Freekiosk extends utils.Adapter {
             this.onReady()
                 .catch(async err => {
                     this.log.error(
-                        `Start failed: ${errorText(err)}; the adapter stays idle until the instance is restarted`,
+                        `Start failed: ${describeError(err)}; the adapter stays idle until the instance is restarted`,
                     );
                     await this.stopAll();
                     await this.markOffline();
                 })
-                .catch(err => this.log.error(`Cleanup after the failed start: ${errorText(err)}`));
+                .catch(err => this.log.error(`Cleanup after the failed start: ${describeError(err)}`));
         });
         this.on('unload', callback => {
             void this.onUnload(callback);
@@ -90,9 +93,10 @@ class Freekiosk extends utils.Adapter {
                 failLogged: false,
                 submitStatus: latestOnly(
                     raw => this.applyStatus(tablet, raw),
-                    err => this.log.warn(`${device.name}: status not stored: ${errorText(err)}`),
+                    err => this.log.warn(`${device.name}: status not stored: ${describeError(err)}`),
                 ),
                 submitImage: {},
+                requestImage: {},
             };
             await this.createObjects(device);
             if (this.stopping) {
@@ -112,14 +116,14 @@ class Freekiosk extends utils.Adapter {
         }
         for (const tablet of this.tablets.values()) {
             if (tablet.config.transport === 'rest') {
-                this.startPolling(tablet, config.restInterval);
+                this.startPolling(tablet, tablet.config, config.restInterval);
             }
         }
         if (this.stopping) {
             return;
         }
         this.on('stateChange', (id, state) => {
-            this.onStateChange(id, state).catch(err => this.log.error(`Command ${id} failed: ${errorText(err)}`));
+            this.onStateChange(id, state).catch(err => this.log.error(`Command ${id} failed: ${describeError(err)}`));
         });
         for (const tablet of this.tablets.values()) {
             for (const def of statesFor(tablet.config.transport).filter(s => s.write)) {
@@ -161,23 +165,23 @@ class Freekiosk extends utils.Adapter {
         await this.setStateAsync(`${device.id}.info.online`, false, true);
     }
 
-    private target(tablet: Tablet): RestTarget {
-        return { host: tablet.config.host, port: tablet.config.port, apiKey: this.settings?.restApiKey ?? '' };
+    private target(device: RestDevice): RestTarget {
+        return { host: device.host, port: device.port, apiKey: this.settings?.restApiKey ?? '' };
     }
 
-    private startPolling(tablet: Tablet, intervalSec: number): void {
-        tablet.poller = new Poller(() => this.pollOnce(tablet, intervalSec), intervalSec * 1000, {
+    private startPolling(tablet: Tablet, device: RestDevice, intervalSec: number): void {
+        tablet.poller = new Poller(() => this.pollOnce(tablet, device, intervalSec), intervalSec * 1000, {
             set: (fn, ms) => this.setTimeout(fn, ms),
             clear: handle => this.clearTimeout(handle as ioBroker.Timeout),
         });
         tablet.poller.start();
     }
 
-    private async pollOnce(tablet: Tablet, intervalSec: number): Promise<void> {
-        const { name, host } = tablet.config;
+    private async pollOnce(tablet: Tablet, device: RestDevice, intervalSec: number): Promise<void> {
+        const { name, host } = device;
         let status: unknown;
         try {
-            status = await fetchStatus(this.target(tablet), this.abort.signal);
+            status = await fetchStatus(this.target(device), this.abort.signal);
         } catch (err) {
             if (this.stopping) {
                 return;
@@ -187,10 +191,12 @@ class Freekiosk extends utils.Adapter {
                 this.log.error(`${name} (${host}) ${problem}; polling stops until the instance restarts`);
                 tablet.poller?.stop();
             } else if (!tablet.failLogged) {
-                this.log.warn(`${name} (${host}) not reachable: ${errorText(err)}; retrying every ${intervalSec} s`);
+                this.log.warn(
+                    `${name} (${host}) not reachable: ${describeError(err)}; retrying every ${intervalSec} s`,
+                );
                 tablet.failLogged = true;
             } else {
-                this.log.debug(`${name} (${host}) still not reachable: ${errorText(err)}`);
+                this.log.debug(`${name} (${host}) still not reachable: ${describeError(err)}`);
             }
             await this.setOnline(tablet, false);
             return;
@@ -208,13 +214,21 @@ class Freekiosk extends utils.Adapter {
             await this.applyStatus(tablet, status);
         } catch (err) {
             if (!this.stopping) {
-                this.log.warn(`${name}: status not stored: ${errorText(err)}`);
+                this.log.warn(`${name}: status not stored: ${describeError(err)}`);
             }
         }
     }
 
     private async startBroker(config: InstanceConfig): Promise<void> {
-        const tabletOf = (topicId: string): Tablet | undefined => this.byTopic.get(topicId);
+        // Broker events for a configured tablet, dropped once the adapter stops.
+        const forTablet =
+            <A extends unknown[]>(handle: (tablet: Tablet, ...args: A) => void) =>
+            (topicId: string, ...args: A): void => {
+                const tablet = this.byTopic.get(topicId);
+                if (tablet && !this.stopping) {
+                    handle(tablet, ...args);
+                }
+            };
         try {
             const broker = await Broker.start(
                 {
@@ -225,37 +239,26 @@ class Freekiosk extends utils.Adapter {
                     topicIds: [...this.byTopic.keys()],
                 },
                 {
-                    status: (topicId, raw) => {
-                        const tablet = tabletOf(topicId);
-                        if (tablet && !this.stopping) {
-                            tablet.submitStatus(raw);
-                        }
-                    },
-                    online: (topicId, online) => {
-                        const tablet = tabletOf(topicId);
-                        if (tablet && !this.stopping) {
-                            this.log.info(`${tablet.config.name} ${online ? 'connected' : 'disconnected'} (MQTT)`);
-                            this.setOnline(tablet, online).catch(err =>
-                                this.log.warn(`${tablet.config.name}: ${errorText(err)}`),
-                            );
-                        }
-                    },
-                    image: (topicId, kind, data) => {
-                        const tablet = tabletOf(topicId);
-                        if (tablet && !this.stopping) {
-                            const submit = (tablet.submitImage[kind] ??= latestOnly(
-                                (image: Buffer) => this.storeImage(tablet, kind, image, 'jpg'),
-                                err => this.log.warn(`${tablet.config.name}: image not stored: ${errorText(err)}`),
-                            ));
-                            submit(data);
-                        }
-                    },
+                    status: forTablet((tablet, raw: unknown) => tablet.submitStatus(raw)),
+                    online: forTablet((tablet, online: boolean) => {
+                        this.log.info(`${tablet.config.name} ${online ? 'connected' : 'disconnected'} (MQTT)`);
+                        this.setOnline(tablet, online).catch(err =>
+                            this.log.warn(`${tablet.config.name}: ${describeError(err)}`),
+                        );
+                    }),
+                    image: forTablet((tablet, kind: ImageKind, data: Buffer) => {
+                        const submit = (tablet.submitImage[kind] ??= latestOnly(
+                            (image: Buffer) => this.storeImage(tablet, kind, image, 'jpg'),
+                            err => this.log.warn(`${tablet.config.name}: image not stored: ${describeError(err)}`),
+                        ));
+                        submit(data);
+                    }),
                     unknownTablet: topicId =>
                         this.log.info(`Tablet "${topicId}" connected but is not in the device table`),
                     dropped: (topicId, reason) => this.log.warn(`${topicId}: message dropped, ${reason}`),
                     loginRefused: address =>
                         this.log.warn(`MQTT login refused from ${address}; check user and password in FreeKiosk`),
-                    error: err => this.log.error(`MQTT broker: ${errorText(err)}`),
+                    error: err => this.log.error(`MQTT broker: ${describeError(err)}`),
                 },
             );
             if (this.stopping) {
@@ -266,7 +269,7 @@ class Freekiosk extends utils.Adapter {
             this.log.info(`MQTT broker listening on port ${config.mqttPort}`);
         } catch (err) {
             this.log.error(
-                `MQTT broker could not start on port ${config.mqttPort}: ${errorText(err)}. MQTT tablets stay offline; check the port in the instance settings.`,
+                `MQTT broker could not start on port ${config.mqttPort}: ${describeError(err)}. MQTT tablets stay offline; check the port in the instance settings.`,
             );
         }
     }
@@ -319,7 +322,8 @@ class Freekiosk extends utils.Adapter {
             return;
         }
         const stateId = relative.slice(dot + 1);
-        const { name, transport } = tablet.config;
+        const device = tablet.config;
+        const { name } = device;
         const built = buildCommand(stateId, state.val);
         if ('error' in built) {
             this.log.warn(`${name} ${stateId}: ${built.error}; nothing sent`);
@@ -331,12 +335,12 @@ class Freekiosk extends utils.Adapter {
         }
         const command = built.command;
         try {
-            if (transport === 'rest') {
+            if (device.transport === 'rest') {
                 if (command.rest) {
-                    await sendRest(this.target(tablet), command.rest, this.abort.signal);
+                    await sendRest(this.target(device), command.rest, this.abort.signal);
                 } else if (command.image) {
-                    const image = await fetchImage(this.target(tablet), command.image, this.abort.signal);
-                    await this.storeImage(tablet, command.image, image.data, image.ext);
+                    this.requestImage(tablet, device, command.image, id, stateId);
+                    return;
                 } else {
                     this.log.warn(`${name}: ${stateId} is not available over REST`);
                     return;
@@ -347,19 +351,51 @@ class Freekiosk extends utils.Adapter {
                     this.log.warn(`${name}: ${stateId} is not available over MQTT`);
                     return;
                 }
-                await this.broker.publish(tablet.config.topicId, command.mqtt.entity, command.mqtt.payload);
+                await this.broker.publish(device.topicId, command.mqtt.entity, command.mqtt.payload);
             }
             await this.setStateAsync(id, command.ackValue, true);
             this.log.debug(`${name}: ${stateId} sent`);
         } catch (err) {
-            if (this.stopping) {
-                return;
-            }
-            if (err instanceof HttpError && err.status === 403) {
-                this.log.warn(`${name}: remote control is disabled in FreeKiosk; ${stateId} not executed`);
-            } else {
-                this.log.warn(`${name}: ${stateId} failed: ${errorText(err)}`);
-            }
+            this.commandFailed(name, stateId, err);
+        }
+    }
+
+    /**
+     * REST image download: one per tablet and kind at a time, presses during a download collapse
+     * into one more download, so an older image can never overwrite a newer one.
+     *
+     * @param tablet REST tablet
+     * @param device the tablet's settings
+     * @param kind image to download
+     * @param id full ID of the button, acknowledged after the image is stored
+     * @param stateId button ID below the tablet, for log lines
+     */
+    private requestImage(tablet: Tablet, device: RestDevice, kind: ImageKind, id: string, stateId: string): void {
+        const { name } = device;
+        const request = (tablet.requestImage[kind] ??= latestOnly<void>(
+            async () => {
+                const image = await fetchImage(this.target(device), kind, this.abort.signal);
+                if (this.stopping) {
+                    return;
+                }
+                await this.storeImage(tablet, kind, image.data, image.ext);
+                await this.setStateAsync(id, true, true);
+                tablet.poller?.trigger();
+                this.log.debug(`${name}: ${stateId} sent`);
+            },
+            err => this.commandFailed(name, stateId, err),
+        ));
+        request();
+    }
+
+    private commandFailed(name: string, stateId: string, err: unknown): void {
+        if (this.stopping) {
+            return;
+        }
+        if (err instanceof HttpError && err.status === 403) {
+            this.log.warn(`${name}: remote control is disabled in FreeKiosk; ${stateId} not executed`);
+        } else {
+            this.log.warn(`${name}: ${stateId} failed: ${describeError(err)}`);
         }
     }
 
@@ -388,7 +424,7 @@ class Freekiosk extends utils.Adapter {
             await this.stopAll();
             await this.markOffline();
         } catch (err) {
-            this.log.error(`Unload: ${errorText(err)}`);
+            this.log.error(`Unload: ${describeError(err)}`);
         } finally {
             callback();
         }

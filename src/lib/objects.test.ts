@@ -28,6 +28,19 @@ describe('objects', () => {
         }
     });
 
+    it('gives every timestamp the unit ms', () => {
+        const dates = STATES.filter(s => s.role === 'date');
+        expect(dates.map(s => s.id)).to.have.members([
+            'info.lastUpdate',
+            'images.screenshotTime',
+            'images.cameraFrontTime',
+            'images.cameraBackTime',
+        ]);
+        for (const s of dates) {
+            expect([s.type, s.unit], s.id).to.deep.equal(['number', 'ms']);
+        }
+    });
+
     it('creates MQTT-only states only for MQTT tablets', () => {
         const restIds = statesFor('rest').map(s => s.id);
         expect(mqttOnlyIds()).to.have.members([
