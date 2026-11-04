@@ -358,6 +358,17 @@ class Freekiosk extends utils.Adapter {
                     this.log.warn(`${name}: ${stateId} is not available over MQTT`);
                     return;
                 }
+                if (command.image) {
+                    // FreeKiosk ignores a capture of a stream that is off; unknown counts as on.
+                    const stream = command.image === 'screenshot' ? 'screenshot' : 'camera';
+                    const enabled = await this.getStateAsync(`${device.id}.images.${stream}Enabled`);
+                    if (enabled?.val === false) {
+                        this.log.warn(
+                            `${name}: ${stateId} not sent; turn on the ${stream} image stream in FreeKiosk's MQTT settings`,
+                        );
+                        return;
+                    }
+                }
                 await this.broker.publish(device.topicId, command.mqtt.entity, command.mqtt.payload);
             }
             await this.setStateAsync(id, command.ackValue, true);

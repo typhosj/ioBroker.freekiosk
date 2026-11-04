@@ -42,6 +42,8 @@ describe('status', () => {
         expect(mqtt.get('sensors.motion')).to.equal(true);
         expect(mqtt.get('sensors.motionAlwaysOn')).to.equal(false);
         expect(mqtt.get('images.screenshotAuto')).to.equal(false);
+        expect(mqtt.get('images.screenshotEnabled')).to.equal(true);
+        expect(mqtt.get('images.cameraEnabled')).to.equal(false);
         expect(mqtt.get('images.cameraInterval')).to.equal(300);
         expect(mqtt.get('webview.rotation')).to.equal(true);
         const rest = mapStatus(mqttState, 'rest').values;

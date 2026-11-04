@@ -224,6 +224,20 @@ tests.integration(path.join(__dirname, '..'), {
                         true,
                         5_000,
                     );
+
+                    // Image capture over MQTT: FreeKiosk publishes only enabled streams. The fixture has the
+                    // screenshot stream on and the camera stream off, so only the screenshot goes out.
+                    expect(await get('freekiosk.0.kitchen.images.screenshotEnabled')).to.equal(true);
+                    expect(await get('freekiosk.0.kitchen.images.cameraEnabled')).to.equal(false);
+                    const captures = [];
+                    tablet.on('message', topic => captures.push(topic));
+                    await set('freekiosk.0.kitchen.commands.cameraFront', true);
+                    await set('freekiosk.0.kitchen.commands.screenshot', true);
+                    await waitFor(async () => captures.length, 1, 5_000);
+                    await delay(1000);
+                    expect(captures).to.deep.equal(['freekiosk/kitchen/set/screenshot_capture']);
+                    expect(await ackOf('freekiosk.0.kitchen.commands.cameraFront')).to.equal(false);
+                    expect(await ackOf('freekiosk.0.kitchen.commands.screenshot')).to.equal(true);
                 } finally {
                     tablet.end(true);
                 }

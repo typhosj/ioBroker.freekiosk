@@ -35,7 +35,7 @@ Each tablet talks to the adapter over either REST (the adapter polls the tablet)
 1. Turn on "Allow remote control" in FreeKiosk.
 1. Add a row to the device table (see below) with transport `MQTT` and FreeKiosk's device name as topic ID. The broker starts only once the table holds an MQTT tablet; until then FreeKiosk reports "connection refused". A tablet that connects under a topic ID not in the table is logged with the topic ID to enter.
 
-Only over MQTT: motion detection, always-on motion detection, periodic screenshots and camera photos, and their intervals. Screenshots and camera photos work over both transports: over REST the adapter downloads them directly when you press the button (screenshot as PNG, camera photo as JPEG); over MQTT the tablet publishes them (JPEG) to the broker.
+Only over MQTT: motion detection, always-on motion detection, periodic screenshots and camera photos, and their intervals. Screenshots and camera photos work over both transports: over REST the adapter downloads them directly when you press the button (screenshot as PNG, camera photo as JPEG); over MQTT the tablet publishes them (JPEG) to the broker, but only for the image streams turned on in FreeKiosk's MQTT settings. `images.screenshotEnabled` and `images.cameraEnabled` show which are on; a capture of a stream that is off is refused with a warning.
 
 ## Device table
 
@@ -97,6 +97,7 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
 ### **WORK IN PROGRESS**
 * (typhosj) MQTT: an empty image from the tablet no longer replaces the last stored image
 * (typhosj) MQTT: commands are refused with a warning while "Allow remote control" is off in FreeKiosk, instead of being acknowledged
+* (typhosj) MQTT: new states `images.screenshotEnabled` and `images.cameraEnabled`; a screenshot or camera capture of a stream that is off in FreeKiosk is refused with a warning instead of being acknowledged
 * (typhosj) MQTT: the broker closes a client that publishes to a `$SYS/` topic
 * (typhosj) MQTT: topic IDs match regardless of case and of characters other than a-z, 0-9, _ and -, because FreeKiosk sends its device name unchanged (such as `KFTRPWI`); commands go out in the spelling the tablet uses
 * (typhosj) MQTT: the log says when the broker does not start because no MQTT tablet is configured, and names the topic ID to enter for a tablet that is not in the device table

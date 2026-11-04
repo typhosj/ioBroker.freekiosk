@@ -46,12 +46,14 @@ describe('objects', () => {
         expect(mqttOnlyIds()).to.have.members([
             'sensors.motion',
             'sensors.motionAlwaysOn',
+            'images.screenshotEnabled',
+            'images.cameraEnabled',
             'images.screenshotAuto',
             'images.cameraAuto',
             'images.screenshotInterval',
             'images.cameraInterval',
         ]);
-        expect(mqttOnlyIds()).to.have.length(6);
+        expect(mqttOnlyIds()).to.have.length(8);
         for (const id of mqttOnlyIds()) {
             expect(restIds).not.to.include(id);
         }
