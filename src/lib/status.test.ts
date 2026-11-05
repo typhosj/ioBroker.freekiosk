@@ -5,35 +5,36 @@ import { mapStatus } from './status';
 
 describe('status', () => {
     it('maps the REST status', () => {
+        // Captured from a Fire HD 10 with FreeKiosk 2.1.0-beta.1, addresses replaced. It has no
+        // proximity sensor and reports -1, which is out of range and left out.
         const { values, skipped } = mapStatus(restStatus.data, 'rest');
-        expect(skipped).to.deep.equal([]);
+        expect(skipped).to.deep.equal(['sensors.proximity']);
         expect(Object.fromEntries(values)).to.deep.equal({
-            'info.version': '2.0.0',
-            'info.model': 'SM-T510',
-            'info.manufacturer': 'samsung',
-            'info.android': '11',
+            'info.version': '2.1.0-beta.1',
+            'info.model': 'KFTRPWI',
+            'info.manufacturer': 'Amazon',
+            'info.android': '9',
             'info.ip': '192.168.1.50',
-            'info.deviceOwner': true,
+            'info.deviceOwner': false,
             'info.kioskMode': true,
-            'battery.level': 85,
+            'battery.level': 100,
             'battery.charging': true,
-            'battery.temperature': 25.5,
+            'battery.temperature': 34,
             'screen.on': true,
-            'screen.brightness': 75,
-            'screen.screensaverActive': false,
+            'screen.brightness': 100,
+            'screen.screensaverActive': true,
             'screen.autoBrightness': false,
-            'webview.url': 'http://192.168.1.10:8082/vis-2/index.html',
+            'webview.url': 'http://192.168.1.10:8082/vis-2/?main#index',
             'webview.loading': false,
             'webview.canGoBack': false,
             'webview.rotation': false,
-            'wifi.ssid': 'Home',
-            'wifi.rssi': -45,
-            'wifi.signalLevel': 83,
-            'sensors.light': 150.5,
-            'sensors.proximity': 5,
-            'audio.volume': 50,
-            'system.memoryUsedPercent': 57,
-            'system.storageAvailable': 15000,
+            'wifi.ssid': 'WiFi (location off)',
+            'wifi.rssi': -55,
+            'wifi.signalLevel': 99,
+            'sensors.light': 99,
+            'audio.volume': 0,
+            'system.memoryUsedPercent': 59,
+            'system.storageAvailable': 18044,
         });
     });
 

@@ -2,46 +2,86 @@
     "success": true,
     "data": {
         "battery": {
-            "level": 85,
+            "level": 100,
             "charging": true,
-            "plugged": "ac",
-            "temperature": 25.5,
-            "voltage": 4.12,
+            "plugged": "wireless",
+            "temperature": 34,
+            "voltage": 4.127,
             "health": "good",
-            "technology": "Li-ion"
+            "technology": "Li-ion",
+            "present": true
         },
-        "screen": { "on": true, "brightness": 75, "screensaverActive": false },
-        "audio": { "volume": 50 },
-        "webview": { "currentUrl": "http://192.168.1.10:8082/vis-2/index.html", "canGoBack": false, "loading": false },
+        "screen": {
+            "on": true,
+            "brightness": 100,
+            "screensaverActive": true
+        },
+        "audio": {
+            "volume": 0
+        },
+        "webview": {
+            "currentUrl": "http://192.168.1.10:8082/vis-2/?main#index",
+            "canGoBack": false,
+            "loading": false
+        },
         "device": {
             "ip": "192.168.1.50",
             "hostname": "freekiosk",
-            "version": "2.0.0",
-            "isDeviceOwner": true,
+            "version": "2.1.0-beta.1",
+            "isDeviceOwner": false,
             "kioskMode": true,
-            "manufacturer": "samsung",
-            "model": "SM-T510",
-            "androidVersion": "11",
-            "apiLevel": 30,
-            "processor": "exynos7904",
-            "deviceName": "gta3xlwifi",
-            "product": "gta3xlwifixx",
-            "uptime": 86400
+            "manufacturer": "Amazon",
+            "model": "KFTRPWI",
+            "androidVersion": "9",
+            "apiLevel": 28,
+            "processor": "mt8183",
+            "deviceName": "trona",
+            "product": "trona",
+            "uptime": 77111
         },
         "wifi": {
-            "ssid": "Home",
-            "signalStrength": -45,
-            "signalLevel": 83,
+            "ssid": "WiFi (location off)",
+            "signalStrength": -55,
+            "signalLevel": 99,
             "connected": true,
             "linkSpeed": 433,
-            "frequency": 5180,
+            "frequency": 5220,
             "ipAddress": "192.168.1.50"
         },
-        "rotation": { "enabled": false, "urls": [], "interval": 30, "currentIndex": 0 },
-        "sensors": { "light": 150.5, "proximity": 5, "accelerometer": { "x": 0.1, "y": 9.8, "z": 0.2 } },
-        "autoBrightness": { "enabled": false, "min": 10, "max": 100, "currentLightLevel": 150.5 },
-        "storage": { "totalMB": 29000, "availableMB": 15000, "usedMB": 14000, "usedPercent": 48 },
-        "memory": { "totalMB": 2800, "availableMB": 1200, "usedMB": 1600, "usedPercent": 57, "lowMemory": false }
+        "rotation": {
+            "enabled": false,
+            "urls": [],
+            "interval": 30,
+            "currentIndex": 0
+        },
+        "sensors": {
+            "light": 99,
+            "proximity": -1,
+            "accelerometer": {
+                "x": -10.036,
+                "y": -0.057,
+                "z": -0.114
+            }
+        },
+        "autoBrightness": {
+            "enabled": false,
+            "min": 0,
+            "max": 1,
+            "currentLightLevel": 99
+        },
+        "storage": {
+            "totalMB": 24522,
+            "availableMB": 18044,
+            "usedMB": 6478,
+            "usedPercent": 26
+        },
+        "memory": {
+            "totalMB": 3804,
+            "availableMB": 1555,
+            "usedMB": 2249,
+            "usedPercent": 59,
+            "lowMemory": false
+        }
     },
-    "timestamp": 1762160000
+    "timestamp": 1793869442
 }

@@ -196,7 +196,7 @@ tests.integration(path.join(__dirname, '..'), {
                 const ackOf = async id => (await call(harness.states.getState.bind(harness.states), id))?.ack;
                 const set = (id, val) => call(harness.states.setState.bind(harness.states), id, { val, ack: false });
 
-                await waitFor(() => get('freekiosk.0.hall.battery.level'), 85, 15_000);
+                await waitFor(() => get('freekiosk.0.hall.battery.level'), restStatus.data.battery.level, 15_000);
                 expect(await get('freekiosk.0.hall.info.online')).to.equal(true);
                 const level = await call(
                     harness.objects.getObject.bind(harness.objects),
