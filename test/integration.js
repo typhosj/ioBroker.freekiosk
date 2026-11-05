@@ -43,8 +43,54 @@ async function waitFor(read, expected, timeoutMs) {
     expect(last).to.equal(expected);
 }
 
+function getObject(harness, id) {
+    return call(harness.objects.getObject.bind(harness.objects), id).then(obj => obj ?? null);
+}
+
+/**
+ * Creates a tablet as an earlier start left it: device, channel and one state.
+ *
+ * @param harness integration test harness
+ * @param id object ID of the tablet
+ */
+async function createTablet(harness, id) {
+    const setObject = (oid, obj) => call(harness.objects.setObject.bind(harness.objects), oid, obj);
+    await setObject(`freekiosk.0.${id}`, { type: 'device', common: { name: id }, native: {} });
+    await setObject(`freekiosk.0.${id}.info`, { type: 'channel', common: { name: 'Information' }, native: {} });
+    await setObject(`freekiosk.0.${id}.info.online`, {
+        type: 'state',
+        common: { name: 'Tablet reachable', type: 'boolean', role: 'indicator.reachable', read: true, write: false },
+        native: {},
+    });
+}
+
 tests.integration(path.join(__dirname, '..'), {
     defineAdditionalTests({ suite }) {
+        suite('deletes tablets removed from the device table', getHarness => {
+            it('deletes a removed tablet and keeps a disabled one, with no image ever stored', async function () {
+                this.timeout(60_000);
+                const harness = getHarness();
+                // No image stored yet: the instance's file folder does not exist.
+                fs.rmSync(path.join(harness.testDir, 'iobroker-data', 'files', 'freekiosk.0'), {
+                    recursive: true,
+                    force: true,
+                });
+                await harness.changeAdapterConfig('freekiosk', {
+                    native: {
+                        devices: [
+                            { enabled: false, name: 'Garage', id: 'garage', transport: 'rest', host: 'x', port: 1 },
+                        ],
+                    },
+                });
+                await createTablet(harness, 'attic');
+                await createTablet(harness, 'garage');
+                await harness.startAdapterAndWait();
+                await waitFor(async () => !!(await getObject(harness, 'freekiosk.0.attic')), false, 15_000);
+                expect(await getObject(harness, 'freekiosk.0.attic.info.online')).to.equal(null);
+                expect(await getObject(harness, 'freekiosk.0.garage.info.online')).to.be.an('object');
+            });
+        });
+
         suite('talks to a REST and an MQTT tablet', getHarness => {
             let server;
             const requests = [];
@@ -142,6 +188,9 @@ tests.integration(path.join(__dirname, '..'), {
                     ...stale,
                     common: { ...stale.common, type: 'number' },
                 });
+                // A tablet whose row was deleted, with a stored image: objects and image go.
+                await createTablet(harness, 'attic');
+                await call(harness.objects.writeFile.bind(harness.objects), 'freekiosk.0', 'attic/screenshot.png', PNG);
                 await harness.startAdapterAndWait();
                 const get = async id => (await call(harness.states.getState.bind(harness.states), id))?.val;
                 const ackOf = async id => (await call(harness.states.getState.bind(harness.states), id))?.ack;
@@ -247,6 +296,10 @@ tests.integration(path.join(__dirname, '..'), {
                 await set('freekiosk.0.kitchen.screen.on', true);
                 await delay(1000);
                 expect(await ackOf('freekiosk.0.kitchen.screen.on')).to.equal(false);
+
+                expect(await getObject(harness, 'freekiosk.0.attic')).to.equal(null);
+                const atticFiles = await call(harness.objects.readDir.bind(harness.objects), 'freekiosk.0', '');
+                expect(atticFiles.map(entry => entry.file)).not.to.include('attic');
 
                 const list = await call(harness.objects.getObjectList.bind(harness.objects), {
                     startkey: 'freekiosk.0.',

@@ -1,7 +1,7 @@
 import { expect } from 'chai';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_DEVICES, normalizeTopicId, validateConfig } from './config';
+import { MAX_DEVICES, normalizeTopicId, removedTablets, validateConfig } from './config';
 
 const base = {
     mqttPort: 1886,
@@ -277,5 +277,36 @@ describe('config', () => {
         const broken = run({ devices: [null, 7, 'x', [rest], rest] });
         expect(broken.config.devices.map(d => d.id)).to.deep.equal(['hall']);
         expect(broken.errors).to.deep.equal([]);
+    });
+});
+
+describe('removedTablets', () => {
+    it('names the tablets no row of the device table names any more', () => {
+        const devices = [rest, mqtt];
+        expect(removedTablets({ devices }, ['hall', 'kitchen', 'attic'])).to.deep.equal(['attic']);
+        expect(removedTablets({ devices: [] }, ['hall'])).to.deep.equal(['hall']);
+        expect(removedTablets({ devices }, [])).to.deep.equal([]);
+    });
+
+    it('keeps the tablets of disabled, invalid and surplus rows', () => {
+        const devices = [
+            { ...rest, enabled: false },
+            { ...mqtt, host: 'http://x', transport: 'nonsense' },
+            { ...rest, id: ' padded ' },
+            ...Array.from({ length: MAX_DEVICES }, (_, i) => ({ ...rest, id: `t${i}` })),
+            { ...rest, id: 'surplus' },
+        ];
+        expect(removedTablets({ devices }, ['hall', 'kitchen', 'padded', 't0', 'surplus'])).to.deep.equal([]);
+    });
+
+    it('compares object IDs exactly, so a renamed ID frees the old objects', () => {
+        expect(removedTablets({ devices: [{ ...rest, id: 'Hall' }] }, ['hall', 'Hall'])).to.deep.equal(['hall']);
+    });
+
+    it('removes nothing while the device table cannot be read', () => {
+        for (const devices of [undefined, null, 'x', 7, {}]) {
+            expect(removedTablets({ devices }, ['hall']), JSON.stringify(devices)).to.deep.equal([]);
+        }
+        expect(removedTablets({ devices: [null, 7, 'x', { id: 5 }] }, ['hall'])).to.deep.equal(['hall']);
     });
 });

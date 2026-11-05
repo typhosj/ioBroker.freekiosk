@@ -41,6 +41,8 @@ Only over MQTT: motion detection, always-on motion detection, periodic screensho
 
 One row per tablet, up to 50 rows. A row that fails validation is logged and skipped; the other tablets keep running.
 
+When you delete a row, the adapter deletes that tablet's objects and stored images at its next start (saving the settings restarts it); custom settings on those objects, such as history, go with them. A disabled row or a row that fails validation keeps its objects. Changing a row's object ID counts as deleting the old tablet and adding a new one.
+
 * **Object ID**: ASCII letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
 * **Transport**: `REST` or `MQTT`.
 * **Host and port** (REST only): a hostname or IP address without `http://`, path or IPv6 zone (`%wlan0`); the port defaults to 8080. MQTT rows need neither.
@@ -79,7 +81,6 @@ Each tablet is a device object named after its ID in the device table.
 ## Known limits
 
 * Auto-brightness can be read but not switched yet.
-* The objects of a removed tablet stay until you delete them by hand.
 * FreeKiosk up to 2.1.0-beta.1 stops sending its status over MQTT after a reconnect to the broker ([RushB-fr/freekiosk#328](https://github.com/RushB-fr/freekiosk/issues/328)): the tablet stays online in ioBroker and still takes commands, but its states can stop updating. The fix is merged in FreeKiosk and ships with its next release. REST tablets are not affected.
 * The adapter restores the names, roles and units of its objects on every start, so a name changed in the object browser does not last. Custom settings such as history stay.
 * One API key and one broker login are shared by all tablets.
@@ -109,6 +110,7 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
 * (typhosj) The web view URL and the display mode URL must start with http:// or https://; spaces around the web view URL are removed before it is sent
 * (typhosj) The settings check object IDs, hosts, topic IDs, the base topic and the MQTT login before saving; object IDs and topic IDs must be unique
 * (typhosj) REST: a host with an IPv6 zone (such as `%wlan0`) is rejected, because no URL can be built from it
+* (typhosj) The objects and images of a tablet whose row was deleted from the device table are deleted at the next start
 * (typhosj) REST: a tablet that answers 401 while no API key is set is logged as "requires an API key"; error messages keep the HTTP status even when the tablet's error answer is too large
 
 ### 0.0.1 (2026-11-03)

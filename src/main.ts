@@ -1,7 +1,7 @@
 import * as utils from '@iobroker/adapter-core';
 import { Broker } from './lib/broker';
 import { buildCommand, type ImageKind } from './lib/commands';
-import { validateConfig, type DeviceConfig, type InstanceConfig, type RestDevice } from './lib/config';
+import { removedTablets, validateConfig, type DeviceConfig, type InstanceConfig, type RestDevice } from './lib/config';
 import { CHANNELS, mqttOnlyIds, statesFor, type StateDef } from './lib/objects';
 import { Poller } from './lib/poller';
 import { fetchImage, fetchStatus, HttpError, sendRest, type RestTarget } from './lib/rest';
@@ -77,11 +77,20 @@ class Freekiosk extends utils.Adapter {
 
     private async onReady(): Promise<void> {
         await this.setState('info.connection', false, true);
-        const { config, errors } = validateConfig(this.config as unknown as Record<string, unknown>);
+        const native = this.config as unknown as Record<string, unknown>;
+        const { config, errors } = validateConfig(native);
         for (const message of errors) {
             this.log.error(message);
         }
         this.settings = config;
+        try {
+            await this.deleteRemovedTablets(native);
+        } catch (err) {
+            this.log.warn(`Removed tablets not cleaned up: ${describeError(err)}; trying again at the next start`);
+        }
+        if (this.stopping) {
+            return;
+        }
         if (!config.devices.length) {
             this.log.warn(
                 'No valid tablet configured; add one in the instance settings. The MQTT broker starts only with an MQTT tablet in the table.',
@@ -137,6 +146,48 @@ class Freekiosk extends utils.Adapter {
                     return;
                 }
             }
+        }
+    }
+
+    /**
+     * Deletes the objects and images of every tablet whose row is gone from the device table.
+     *
+     * @param native the instance's native settings
+     */
+    private async deleteRemovedTablets(native: Record<string, unknown>): Promise<void> {
+        const prefix = `${this.namespace}.`;
+        const view = await this.getObjectViewAsync('system', 'device', {
+            startkey: prefix,
+            endkey: `${prefix}香`,
+        });
+        const existing = view.rows.map(row => row.id.slice(prefix.length)).filter(id => id && !id.includes('.'));
+        const removed = removedTablets(native, existing);
+        if (!removed.length) {
+            return;
+        }
+        const folders = new Set((await this.imageFolders()).filter(entry => entry.isDir).map(entry => entry.file));
+        for (const id of removed) {
+            if (this.stopping) {
+                return;
+            }
+            await this.delObjectAsync(id, { recursive: true });
+            if (folders.has(id)) {
+                await this.delFileAsync(this.namespace, id);
+            }
+            this.log.info(`Tablet "${id}" is no longer in the device table; its objects and images were deleted`);
+        }
+    }
+
+    /** Top level of the instance's file storage; empty before the first image was stored. */
+    private async imageFolders(): Promise<ioBroker.ReadDirResult[]> {
+        try {
+            return await this.readDirAsync(this.namespace, '');
+        } catch (err) {
+            // The file database reports a storage folder that was never written as "Not exists".
+            if (err instanceof Error && err.message === 'Not exists') {
+                return [];
+            }
+            throw err;
         }
     }
 

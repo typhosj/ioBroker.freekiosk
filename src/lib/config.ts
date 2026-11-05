@@ -188,3 +188,18 @@ export function validateConfig(native: Record<string, unknown>): { config: Insta
     }
     return { config, errors };
 }
+
+/**
+ * Tablets whose row was deleted from the device table, so their objects can go. A disabled,
+ * invalid or surplus row still names its tablet; an unreadable table names none as removed.
+ *
+ * @param native The instance's native settings as read from the adapter object
+ * @param existing Object IDs of the tablet devices that exist below the instance
+ */
+export function removedTablets(native: Record<string, unknown>, existing: string[]): string[] {
+    if (!Array.isArray(native.devices)) {
+        return [];
+    }
+    const named = new Set(native.devices.map(row => (isObject(row) ? text(row.id) : '')));
+    return existing.filter(id => !named.has(id));
+}
