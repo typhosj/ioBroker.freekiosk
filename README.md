@@ -18,7 +18,7 @@ Each tablet talks to the adapter over either REST (the adapter polls the tablet)
 
 ## Requirements
 
-* FreeKiosk 2.0.0 or newer (2.0.0 is the tested version)
+* FreeKiosk 2.0.0 or newer (tested with 2.0.0 and 2.1.0-beta.1)
 * Node.js 22.12 or newer
 
 ## Setup over REST
@@ -78,8 +78,9 @@ Each tablet is a device object named after its ID in the device table.
 
 ## Known limits
 
-* Auto-brightness can be read but not switched; FreeKiosk 2.0.0 has no command for it.
+* Auto-brightness can be read but not switched yet.
 * The objects of a removed tablet stay until you delete them by hand.
+* FreeKiosk up to 2.1.0-beta.1 stops sending its status over MQTT after a reconnect to the broker ([RushB-fr/freekiosk#328](https://github.com/RushB-fr/freekiosk/issues/328)): the tablet stays online in ioBroker and still takes commands, but its states can stop updating. The fix is merged in FreeKiosk and ships with its next release. REST tablets are not affected.
 * The adapter restores the names, roles and units of its objects on every start, so a name changed in the object browser does not last. Custom settings such as history stay.
 * One API key and one broker login are shared by all tablets.
 * No TLS for the broker.
@@ -112,6 +113,8 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
 
 ### 0.0.1 (2026-11-03)
 * (typhosj) Initial release: REST and MQTT tablets, status, commands, screenshots, camera photos, motion detection
+
+Older changes: [CHANGELOG_OLD.md](CHANGELOG_OLD.md)
 
 ## License
 MIT License
