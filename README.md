@@ -96,7 +96,7 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
     ### **WORK IN PROGRESS**
 -->
 
-### **WORK IN PROGRESS**
+### 0.1.0 (2026-11-05)
 * (typhosj) MQTT: an empty image from the tablet no longer replaces the last stored image
 * (typhosj) MQTT: commands are refused with a warning while "Allow remote control" is off in FreeKiosk, instead of being acknowledged
 * (typhosj) MQTT: new states `images.screenshotEnabled` and `images.cameraEnabled`; a screenshot or camera capture of a stream that is off in FreeKiosk is refused with a warning instead of being acknowledged
@@ -112,9 +112,6 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
 * (typhosj) REST: a host with an IPv6 zone (such as `%wlan0`) is rejected, because no URL can be built from it
 * (typhosj) The objects and images of a tablet whose row was deleted from the device table are deleted at the next start
 * (typhosj) REST: a tablet that answers 401 while no API key is set is logged as "requires an API key"; error messages keep the HTTP status even when the tablet's error answer is too large
-
-### 0.0.1 (2026-11-03)
-* (typhosj) Initial release: REST and MQTT tablets, status, commands, screenshots, camera photos, motion detection
 
 Older changes: [CHANGELOG_OLD.md](CHANGELOG_OLD.md)
 

@@ -1,6 +1,6 @@
 {
   "name": "iobroker.freekiosk",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Monitor and control Android tablets running FreeKiosk over REST or MQTT",
   "author": {
     "name": "typhosj",
