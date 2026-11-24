@@ -1,7 +1,27 @@
 import { expect } from 'chai';
-import { CHANNELS, STATES, mqttOnlyIds, statesFor } from './objects';
+import { CHANNELS, STATES, hasCustom, mqttOnlyIds, statesFor } from './objects';
 
 describe('objects', () => {
+    it('detects custom settings only when an entry is set', () => {
+        expect(hasCustom({ common: { custom: { 'history.0': { enabled: true } } } })).to.equal(true);
+        expect(hasCustom({ common: { custom: { 'history.0': null, 'sql.0': { enabled: true } } } })).to.equal(true);
+        for (const obj of [
+            undefined,
+            null,
+            {},
+            { common: null },
+            { common: 'x' },
+            { common: {} },
+            { common: { custom: null } },
+            { common: { custom: [] } },
+            { common: { custom: 'history.0' } },
+            { common: { custom: {} } },
+            { common: { custom: { 'history.0': null } } },
+        ]) {
+            expect(hasCustom(obj), JSON.stringify(obj)).to.equal(false);
+        }
+    });
+
     it('has unique ids inside known channels', () => {
         const ids = STATES.map(s => s.id);
         expect(new Set(ids).size).to.equal(ids.length);

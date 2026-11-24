@@ -1,4 +1,5 @@
 import type { Transport } from './config';
+import { isObject } from './guards';
 
 /** One ioBroker state the adapter creates for each tablet. */
 export interface StateDef {
@@ -368,4 +369,18 @@ export function statesFor(transport: Transport): StateDef[] {
 /** States that only MQTT tablets have; removed when a tablet switches to REST. */
 export function mqttOnlyIds(): string[] {
     return STATES.filter(s => s.mqttOnly).map(s => s.id);
+}
+
+/**
+ * True when the user configured custom settings (history, InfluxDB, SQL, ...) on the object.
+ * Such an object is never deleted: its link to the logged data would be lost.
+ *
+ * @param obj object from the database, or nothing
+ */
+export function hasCustom(obj: { common?: unknown } | null | undefined): boolean {
+    const common = obj?.common;
+    if (!isObject(common) || !isObject(common.custom)) {
+        return false;
+    }
+    return Object.values(common.custom).some(entry => entry !== null && entry !== undefined);
 }

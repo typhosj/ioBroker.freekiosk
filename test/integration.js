@@ -52,14 +52,22 @@ function getObject(harness, id) {
  *
  * @param harness integration test harness
  * @param id object ID of the tablet
+ * @param custom custom settings of the state, such as history
  */
-async function createTablet(harness, id) {
+async function createTablet(harness, id, custom) {
     const setObject = (oid, obj) => call(harness.objects.setObject.bind(harness.objects), oid, obj);
     await setObject(`freekiosk.0.${id}`, { type: 'device', common: { name: id }, native: {} });
     await setObject(`freekiosk.0.${id}.info`, { type: 'channel', common: { name: 'Information' }, native: {} });
     await setObject(`freekiosk.0.${id}.info.online`, {
         type: 'state',
-        common: { name: 'Tablet reachable', type: 'boolean', role: 'indicator.reachable', read: true, write: false },
+        common: {
+            name: 'Tablet reachable',
+            type: 'boolean',
+            role: 'indicator.reachable',
+            read: true,
+            write: false,
+            ...(custom ? { custom } : {}),
+        },
         native: {},
     });
 }
@@ -67,7 +75,7 @@ async function createTablet(harness, id) {
 tests.integration(path.join(__dirname, '..'), {
     defineAdditionalTests({ suite }) {
         suite('deletes tablets removed from the device table', getHarness => {
-            it('deletes a removed tablet and keeps a disabled one, with no image ever stored', async function () {
+            it('deletes a removed tablet, keeps a disabled one and one with history, no image stored', async function () {
                 this.timeout(60_000);
                 const harness = getHarness();
                 // No image stored yet: the instance's file folder does not exist.
@@ -84,10 +92,13 @@ tests.integration(path.join(__dirname, '..'), {
                 });
                 await createTablet(harness, 'attic');
                 await createTablet(harness, 'garage');
+                await createTablet(harness, 'cellar', { 'history.0': { enabled: true } });
                 await harness.startAdapterAndWait();
                 await waitFor(async () => !!(await getObject(harness, 'freekiosk.0.attic')), false, 15_000);
                 expect(await getObject(harness, 'freekiosk.0.attic.info.online')).to.equal(null);
                 expect(await getObject(harness, 'freekiosk.0.garage.info.online')).to.be.an('object');
+                const kept = await getObject(harness, 'freekiosk.0.cellar.info.online');
+                expect(kept?.common.custom).to.deep.equal({ 'history.0': { enabled: true } });
             });
         });
 
@@ -184,6 +195,10 @@ tests.integration(path.join(__dirname, '..'), {
                     native: {},
                 };
                 await setObject('freekiosk.0.hall.sensors.motion', stale);
+                await setObject('freekiosk.0.hall.sensors.motionAlwaysOn', {
+                    ...stale,
+                    common: { ...stale.common, custom: { 'history.0': { enabled: true } } },
+                });
                 await setObject('freekiosk.0.hall.battery.level', {
                     ...stale,
                     common: { ...stale.common, type: 'number' },
@@ -312,6 +327,9 @@ tests.integration(path.join(__dirname, '..'), {
                 fs.writeFileSync(DUMP, JSON.stringify(dump, null, 2));
                 expect(dump).to.have.property('freekiosk.0.kitchen.sensors.motion');
                 expect(dump).not.to.have.property('freekiosk.0.hall.sensors.motion');
+                expect(dump['freekiosk.0.hall.sensors.motionAlwaysOn']?.common.custom).to.deep.equal({
+                    'history.0': { enabled: true },
+                });
             });
         });
     },

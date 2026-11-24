@@ -41,7 +41,7 @@ Only over MQTT: motion detection, always-on motion detection, periodic screensho
 
 One row per tablet, up to 50 rows. A row that fails validation is logged and skipped; the other tablets keep running.
 
-When you delete a row, the adapter deletes that tablet's objects and stored images at its next start (saving the settings restarts it); custom settings on those objects, such as history, go with them. A disabled row or a row that fails validation keeps its objects. Changing a row's object ID counts as deleting the old tablet and adding a new one.
+When you delete a row, the adapter deletes that tablet's objects and stored images at its next start (saving the settings restarts it). If one of its states has custom settings such as history, the adapter keeps all of that tablet's objects and images, logs a warning naming those states, and deletes them at the first start after you removed the custom settings. The same applies to the MQTT-only states of a tablet switched to REST. A disabled row or a row that fails validation keeps its objects. Changing a row's object ID counts as deleting the old tablet and adding a new one.
 
 * **Object ID**: ASCII letters, digits, `_` and `-`, at most 32 characters, unique regardless of case, and not `info`.
 * **Transport**: `REST` or `MQTT`.
@@ -95,6 +95,8 @@ The adapter icon is derived from the FreeKiosk logo of [RushB-fr/freekiosk](http
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+### **WORK IN PROGRESS**
+* (typhosj) Objects with custom settings such as history are no longer deleted: a tablet removed from the device table keeps its objects, and a tablet switched to REST keeps its MQTT-only states, until the custom settings are removed
 
 ### 0.1.0 (2026-11-05)
 * (typhosj) MQTT: an empty image from the tablet no longer replaces the last stored image

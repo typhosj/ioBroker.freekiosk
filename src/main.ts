@@ -2,7 +2,7 @@ import * as utils from '@iobroker/adapter-core';
 import { Broker } from './lib/broker';
 import { buildCommand, type ImageKind } from './lib/commands';
 import { removedTablets, validateConfig, type DeviceConfig, type InstanceConfig, type RestDevice } from './lib/config';
-import { CHANNELS, mqttOnlyIds, statesFor, type StateDef } from './lib/objects';
+import { CHANNELS, hasCustom, mqttOnlyIds, statesFor, type StateDef } from './lib/objects';
 import { Poller } from './lib/poller';
 import { fetchImage, fetchStatus, HttpError, sendRest, type RestTarget } from './lib/rest';
 import { latestOnly } from './lib/latest';
@@ -150,7 +150,8 @@ class Freekiosk extends utils.Adapter {
     }
 
     /**
-     * Deletes the objects and images of every tablet whose row is gone from the device table.
+     * Deletes the objects and images of every tablet whose row is gone from the device table,
+     * unless one of its states has custom settings.
      *
      * @param native the instance's native settings
      */
@@ -169,6 +170,17 @@ class Freekiosk extends utils.Adapter {
         for (const id of removed) {
             if (this.stopping) {
                 return;
+            }
+            const states = await this.getObjectViewAsync('system', 'state', {
+                startkey: `${prefix}${id}.`,
+                endkey: `${prefix}${id}.香`,
+            });
+            const custom = states.rows.filter(row => hasCustom(row.value)).map(row => row.id);
+            if (custom.length) {
+                this.log.warn(
+                    `Tablet "${id}" is no longer in the device table, but its objects are kept because these have custom settings such as history: ${custom.join(', ')}. Remove the custom settings to have the objects deleted at the next start.`,
+                );
+                continue;
             }
             await this.delObjectAsync(id, { recursive: true });
             if (folders.has(id)) {
@@ -212,7 +224,12 @@ class Freekiosk extends utils.Adapter {
         if (device.transport === 'rest') {
             for (const id of mqttOnlyIds()) {
                 const full = `${device.id}.${id}`;
-                if (await this.getObjectAsync(full)) {
+                const obj = await this.getObjectAsync(full);
+                if (hasCustom(obj)) {
+                    this.log.warn(
+                        `${device.name}: ${this.namespace}.${full} exists only for MQTT tablets but is kept because it has custom settings such as history. Remove the custom settings to have it deleted at the next start.`,
+                    );
+                } else if (obj) {
                     await this.delObjectAsync(full);
                 }
             }
